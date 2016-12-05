@@ -29,7 +29,7 @@ knitr::opts_chunk$set(echo = TRUE)
 Install the required packages to knit this file  
 ```{r install_required_packages, eval = FALSE, include = FALSE}
 
-required.packages <- c('data.table', 'ggplot2', 'plyr', 'grid', 'splines', 'stats', 'graphics', 'reshape2', 'NMF')
+required.packages <- c('data.table', 'ggplot2', 'plyr', 'grid', 'splines', 'stats', 'graphics', 'reshape2', 'NMF', "stringr")
 required.package.installed <- sapply(required.packages, require, character.only = TRUE)
 if(!all(required.package.installed)) {
   
@@ -52,6 +52,7 @@ require(stats)
 require(graphics)
 require(reshape2)
 require(NMF)
+require(stringr)
 
 ```
 
@@ -472,32 +473,63 @@ newcmaxPlates<-newCmax[newcmaxPlates]
 
 newcmaxPlates[ is.na(cmax) , 1:5]
 newcmaxPlates[treatment %in% "dmso", cmax := 0 ]
+newcmaxPlates[treatment %in% "dmso", dose_uM]
+
+newcmaxPlates[treatment %in% "dmso", dose_uM := "0" ]
+
+mean.data.ICAM1[ treatment %in% "dmso", list(treatment, dose_uM, cmax) ]
+table(mean.data.ICAM1[ treatment %in% "dmso", list(treatment, dose_uM, cmax) ]$dose_uM)
+# apparently percentage & fraction for dmso concentrations was both used in layout files.
+
+mean.data.ICAM1[ treatment %in% "dmso" & dose_uM == 100, dose_uM := 0.2 ]
+mean.data.ICAM1[ treatment %in% "dmso" & dose_uM == 50, dose_uM := 0.1 ]
+mean.data.ICAM1[ treatment %in% "dmso" & dose_uM == 10, dose_uM := 0.02 ]
+mean.data.ICAM1[ treatment %in% "dmso" & dose_uM == 5, dose_uM := 0.01 ]
+mean.data.ICAM1[ treatment %in% "dmso" & dose_uM == 1, dose_uM := 0.002 ]
+
+# test for effect of DMSO concentration
+dmsotest <- mean.data.ICAM1[ treatment %in% "dmso"]
+
+dmsotest <- aggregate( data = dmsotest, obj_cyto_only_Intensity_IntegratedIntensity_image_GFP ~ dose_uM + plateID, mean )
+plot(data= dmsotest, obj_cyto_only_Intensity_IntegratedIntensity_image_GFP ~ dose_uM, ylim = c(0,50),
+     col = as.factor(dmsotest$plateID))
+# plate effect apparant, but no DMSO concentration effect. Pooling DMSO to simplify analysis:
+mean.data.ICAM1[ treatment %in% "dmso" , dose_uM := 0]
+mean.data.ICAM1[ treatment %in% "dmso" , cmax := "0"]
 
 
-
-new.cmaxICAM1.long<- melt(new.cmaxICAM1,  id.vars = c("treatment", "dose_uM","cmax", "cell_line", "plateID", "timeID", "timeAfterExposure"))
-head(new.cmaxICAM1.long)
-
-sum(is.na(new.cmaxICAM1.long[, cmax]))
-
-unique(new.cmaxICAM1.long[is.na(new.cmaxICAM1.long[, cmax]), cmax:=0.2])
-
-
-
-all.treats<-unique(new.cmaxICAM1.long[, treatment])
+lapply(mean.data.ICAM1[,1:7], class)
+lapply(newcmaxPlates[,1:7], class)
+newcmaxPlates[, cmax := as.character(cmax)]
+mean.data.ICAM1[ , dose_uM := as.numeric(dose_uM)]
+# combine both sets
+mean.data.ICAM1 <- rbind(mean.data.ICAM1, newcmaxPlates)
+# remove 25 cmax
+mean.data.ICAM1 <- mean.data.ICAM1[ cmax != "25"]
+mean.data.ICAM1.long<- melt(mean.data.ICAM1,  id.vars = c("treatment", "dose_uM","cmax", "cell_line", "plateID", "timeID", "timeAfterExposure"))
 
 
-new.cmaxICAM1.long.dmso0<- new.cmaxICAM1.long
-new.cmaxICAM1.long.dmso0<-as.data.table(new.cmaxICAM1.long.dmso0)
-new.cmaxICAM1.long.dmso0[ treatment %in% "DMSO", dose_uM:=0]
-all.icam.feats<- unique(new.cmaxICAM1.long.dmso0[, variable])
-new.cmaxICAM1.long.dmso0[, replID:= plateID]
-new.cmaxICAM1.long.dmso0[, plateID:= paste(plateID, cmax, sep="_")]
+# add replicate ID
+ mean.data.ICAM1.long[ plateID == "20160113 - 100cMax_wells", replID := "replicate_1" ]  #icam1 100cmax repl1
+ mean.data.ICAM1.long[ plateID == "20150830 - 100cMax_wells", replID := "replicate_2"]  #icam1 100cmax repl2
+ mean.data.ICAM1.long[ plateID == "20140701 - 50cMax_wells", replID := "replicate_1"]  #icam1 50cmax repl1
+ mean.data.ICAM1.long[ plateID == "20150828 - 50cMax_wells", replID := "replicate_2"]  #icam1 50cmax repl2
+ mean.data.ICAM1.long[ plateID == "20150604 - 10cMax_wells", replID := "replicate_1"]  #icam1 10cmax repl1
+ mean.data.ICAM1.long[ plateID == "20150608 - 10cMax_wells", replID := "replicate_2"]  #icam1 10cmax repl2
+ mean.data.ICAM1.long[ plateID == "20150601 - 5cMax_wells", replID := "replicate_1"]  #icam1 5cmax repl1
+ mean.data.ICAM1.long[ plateID == "20151231 - 5cMax_wells", replID := "replicate_2"]  #icam1 5cmax repl2
+ mean.data.ICAM1.long[ plateID == "20150829 - 1cMax_wells", replID := "replicate_1"]  #icam1 1cmax repl1
+ mean.data.ICAM1.long[ plateID == "20150914 - 1cMax_wells", replID := "replicate_1"]  #icam1 1cmax repl1
 
+ unique(mean.data.ICAM1.long[ is.na(replID), plateID])
+mean.data.ICAM1.long[ plateID == "20150923_ICAM1", replID := "replicate_1"]  #icam1 new cmax repl1 
+mean.data.ICAM1.long[ plateID == "20150930_ICAM1", replID := "replicate_2"]  #icam1 new cmax repl2
 
-
+unique(mean.data.ICAM1.long[ cmax != "0" , list(plateID, cmax)])
 
 ```
+
+
 
 ## Summary data Srxn1, Chop, p21
 
@@ -513,18 +545,397 @@ dir.files <- dir.files[grepl("(Summary Data)", dir.files)]
 for (i in seq_along(dir.files)){
   raw.data[[i]] <- read.table(file = paste(path.to.nonICAM, dir.files[i], sep ="/"), header = TRUE, sep ="\t")
 }
-head(raw.data[[1]])
+
+
+
+```
+
+Data cleaning   
+
+```{r }
 
 # first 3 no timeAfterExposure
 # 2013-07-10 1.2  0.8
 # 2013-07-24 1.076 tr  40min del
 # 2013-07-29  59 min  20 min
 
+
+timeBetweenFrames <- 1.2
+exposureDelay <- 0.8
+raw.data[[1]]$timeAfterExposure<- as.integer(raw.data[[1]]$timeID) * timeBetweenFrames + exposureDelay - timeBetweenFrames
+
+timeBetweenFrames <- 1.076
+exposureDelay <- 0.667
+raw.data[[2]]$timeAfterExposure<- as.integer(raw.data[[2]]$timeID) * timeBetweenFrames + exposureDelay - timeBetweenFrames
+
+timeBetweenFrames <- 0.983
+exposureDelay <- 0.333
+raw.data[[3]]$timeAfterExposure<- as.integer(raw.data[[3]]$timeID) * timeBetweenFrames + exposureDelay - timeBetweenFrames
+
+lapply(raw.data, ncol)
+
+raw.data[[26]]$doseLevel <- NULL
+
+raw.data <- do.call("rbind" ,raw.data)
+
+raw.data$treatment <- tolower(raw.data$treatment)
+
+raw.data$control <-NULL
+sum(is.na(raw.data))
+
+head(raw.data)
+
+raw.data$variable <- gsub("_>_", "_larger_", raw.data$variable)
+raw.data$variable <- gsub("_<_", "_smaller_", raw.data$variable)
+
+# fix cell line names
+unique(raw.data$cell_line)
+raw.data$cell_line <- gsub("Chop", "DDIT3", raw.data$cell_line)
+unique(raw.data$plateID)
+raw.data$replID <- NA
+raw.data$cmax <- NA
+raw.data[ raw.data$plateID == "2013_07_10_Srxn1_z1", "replID"] <-   "replicate_1"  #Srxn1 100cmax
+raw.data[ raw.data$plateID == "2013_07_10_Srxn1_z1", "cmax"] <-   "100cmax"  #Srxn1 100cmax
+
+raw.data[ raw.data$plateID == "2013_07_24_Srxn1", "replID"] <-      "replicate_2"  #Srxn1 100cmax
+raw.data[ raw.data$plateID == "2013_07_24_Srxn1", "cmax"] <-      "100cmax"  #Srxn1 100cmax
+
+raw.data[ raw.data$plateID == "2013_07_29_Srxn1", "replID"] <-      "replicate_3"  #Srxn1 100cmax
+raw.data[ raw.data$plateID == "2013_07_29_Srxn1", "cmax"] <-      "100cmax"  #Srxn1 100cmax
+
+raw.data[ raw.data$plateID == "2013_08_01_Srxn1", "replID"] <-      "replicate_4"  #Srxn1 100cmax
+raw.data[ raw.data$plateID == "2013_08_01_Srxn1", "cmax"] <-      "100cmax"  #Srxn1 100cmax
+
+raw.data[ raw.data$plateID == "2013_08_14_Srxn1", "replID"] <-      "replicate_5"  #Srxn1 100cmax
+raw.data[ raw.data$plateID == "2013_08_14_Srxn1", "cmax"] <-      "100cmax"  #Srxn1 100cmax
+
+raw.data[ raw.data$plateID == "2013_08_15_Srxn1", "replID"] <-      "replicate_1"  #Srxn1 50cmax
+raw.data[ raw.data$plateID == "2013_08_15_Srxn1", "cmax"] <-      "50cmax"  #Srxn1 50cmax
+
+raw.data[ raw.data$plateID == "2013_08_21_Srxn1", "replID"] <-      "replicate_2"  #Srxn1 50cmax
+raw.data[ raw.data$plateID == "2013_08_21_Srxn1", "cmax"] <-      "50cmax"  #Srxn1 50cmax
+
+raw.data[ raw.data$plateID == "2013_08_22_Srxn1", "replID"] <-      "replicate_3"  #Srxn1 50cmax     
+raw.data[ raw.data$plateID == "2013_08_22_Srxn1", "cmax"] <-      "50cmax"  #Srxn1 50cmax
+
+raw.data[ raw.data$plateID == "2013_08_28_nii_Srxn1", "replID"] <-  "replicate_1"  #Srxn1 10cmax
+raw.data[ raw.data$plateID == "2013_08_28_nii_Srxn1", "cmax"] <-  "10cmax"  #Srxn1 10cmax
+
+raw.data[ raw.data$plateID == "2013_08_28_niii_Srxn1", "replID"] <- "replicate_2"  #Srxn1 10cmax  
+raw.data[ raw.data$plateID == "2013_08_28_niii_Srxn1", "cmax"] <- "10cmax"  #Srxn1 10cmax
+
+raw.data[ raw.data$plateID == "2013_09_04_Srxn1", "replID"] <-      "replicate_3"  #Srxn1 10cmax
+raw.data[ raw.data$plateID == "2013_09_04_Srxn1", "cmax"] <-      "10cmax"  #Srxn1 10cmax
+
+raw.data[ raw.data$plateID == "2013_09_05_Srxn1", "replID"] <-      "replicate_1"  #Srxn1 5cmax
+raw.data[ raw.data$plateID == "2013_09_05_Srxn1", "cmax"] <-      "5cmax"  #Srxn1 5cmax
+
+raw.data[ raw.data$plateID == "2013_09_09_Srxn1", "replID"] <-      "replicate_2"  #Srxn1 5cmax
+raw.data[ raw.data$plateID == "2013_09_09_Srxn1", "cmax"] <-      "5cmax"  #Srxn1 5cmax
+
+raw.data[ raw.data$plateID == "2013_09_16_Srxn1", "replID"] <-      "replicate_1"  #Srxn1 1cmax
+raw.data[ raw.data$plateID == "2013_09_16_Srxn1", "cmax"] <-      "1cmax"  #Srxn1 1cmax
+
+
+raw.data$plateID <- gsub("25-9-2013_Srxn1", "2013_09_25_Srxn1", raw.data$plateID)
+
+raw.data[ raw.data$plateID == "2013_09_25_Srxn1", "replID"] <-       "replicate_2"  #Srxn1 1cmax
+raw.data[ raw.data$plateID == "2013_09_25_Srxn1", "cmax"] <-       "1cmax"  #Srxn1 1cmax
+
+raw.data[ raw.data$plateID == "2013_09_26_DDIT3", "replID"] <-      "replicate_1"  #DDIT3 100cmax
+raw.data[ raw.data$plateID == "2013_09_26_DDIT3", "cmax"] <-      "100cmax"  #DDIT3 100cmax
+
+raw.data[ raw.data$plateID == "2013_10_03_DDIT3", "replID"] <-      "replicate_2"  #DDIT3 100cmax
+raw.data[ raw.data$plateID == "2013_10_03_DDIT3", "cmax"] <-      "100cmax"  #DDIT3 100cmax
+
+raw.data[ raw.data$plateID == "2013_10_04_DDIT3", "replID"] <-      "replicate_1"  #DDIT3 50cmax
+raw.data[ raw.data$plateID == "2013_10_04_DDIT3", "cmax"] <-      "50cmax"  #DDIT3 50cmax
+
+raw.data[ raw.data$plateID == "2013_10_09_niii_p21", "replID"] <-   "replicate_1"  #p21 100cmax
+raw.data[ raw.data$plateID == "2013_10_09_niii_p21", "cmax"] <-   "100cmax"  #p21 100cmax
+
+raw.data[ raw.data$plateID == "2013_10_09_nii_p21", "replID"] <-    "replicate_2"  #p21 100cmax
+raw.data[ raw.data$plateID == "2013_10_09_nii_p21", "cmax"] <-    "100cmax"  #p21 100cmax
+
+raw.data[ raw.data$plateID == "2013_10_17_nii_DDIT3", "replID"] <-  "replicate_2"  #DDIT3 50cmax
+raw.data[ raw.data$plateID == "2013_10_17_nii_DDIT3", "cmax"] <-  "50cmax"  #DDIT3 50cma
+
+raw.data[ raw.data$plateID == "2013_10_17_niii", "replID"] <-       "replicate_3"  #DDIT3 50 cmax
+raw.data[ raw.data$plateID == "2013_10_17_niii", "cmax"] <-       "50cmax"  #DDIT3 50 cm
+
+raw.data[ raw.data$plateID == "2013_10_24_DDIT3", "replID"] <-      "replicate_1"  #DDIT3 10 cmax
+raw.data[ raw.data$plateID == "2013_10_24_DDIT3", "cmax"] <-      "10cmax"  #DDIT3 10 cm
+
+raw.data[ raw.data$plateID == "2013_11_20_DDIT3", "replID"] <-      "replicate_2"  #DDIT3 10 cmax
+raw.data[ raw.data$plateID == "2013_11_20_DDIT3", "cmax"] <-      "10cmax"  #DDIT3 10 cm
+
+raw.data[ raw.data$plateID == "2013_11_27_DDIT3", "replID"] <-      "replicate_1"  #DDIT3 5 cmax
+raw.data[ raw.data$plateID == "2013_11_27_DDIT3", "cmax"] <-      "5cmax"  #DDIT3 5 cma
+
+raw.data[ raw.data$plateID == "2013_12_04_DDIT3_niii", "replID"] <-      "replicate_1"  #DDIT3 1 cmax
+raw.data[ raw.data$plateID == "2013_12_04_DDIT3_niii", "cmax"] <-      "1cmax"  #DDIT3 
+
+raw.data[ raw.data$plateID == "2013_12_04_DDIT3_nii", "replID"] <-  "replicate_2"  #DDIT3 1 cmax
+raw.data[ raw.data$plateID == "2013_12_04_DDIT3_nii", "cmax"] <-  "1cmax"  #DDIT3 1 cma
+
+raw.data[ raw.data$plateID == "2013_12_11_DDIT3", "replID"] <-  "replicate_2"  #DDIT3 5 cmax
+raw.data[ raw.data$plateID == "2013_12_11_DDIT3", "cmax"] <-  "5cmax"  #DDIT3 5 cmax
+
+raw.data[ raw.data$plateID == "2014_02_05_nii_p21", "replID"] <-    "replicate_1" #p21 10cmax
+raw.data[ raw.data$plateID == "2014_02_05_nii_p21", "cmax"] <-    "10cmax" #p21 10cma
+
+raw.data[ raw.data$plateID == "2014_02_05_p21_niii", "replID"] <-   "replicate_2" #p21 10cmax
+raw.data[ raw.data$plateID == "2014_02_05_p21_niii", "cmax"] <-   "10cmax" #p21 10cma
+
+raw.data[ raw.data$plateID == "2014_02_11_p21", "replID"] <-        "replicate_1" #p21 50cmax
+raw.data[ raw.data$plateID == "2014_02_11_p21", "cmax"] <-        "50cmax" #p21 50cma
+
+raw.data[ raw.data$plateID == "p21_50Cmax", "replID"] <-        "replicate_2" #p21 50cmax
+raw.data[ raw.data$plateID == "p21_50Cmax", "cmax"] <-        "50cmax" #p21 50cmax
+
+raw.data[ raw.data$plateID == "2014_02_18_p21", "replID"] <-        "replicate_1" #p21 5cmax 
+raw.data[ raw.data$plateID == "2014_02_18_p21", "cmax"] <-        "5cmax" #p21 5cmax
+
+raw.data[ raw.data$plateID == "2014_02_19_p21", "replID"] <-        "replicate_2" #p21 5cmax
+raw.data[ raw.data$plateID == "2014_02_19_p21", "cmax"] <-        "5cmax" #p21 5cmax
+
+raw.data[ raw.data$plateID == "2014_02_25_p21", "replID"] <-        "replicate_1" #p21 1cmax
+raw.data[ raw.data$plateID == "2014_02_25_p21", "cmax"] <-        "1cmax" #p21 1cmax
+
+raw.data[ raw.data$plateID == "2014_03_05_p21", "replID"] <-        "replicate_2" #p21 1cmax
+raw.data[ raw.data$plateID == "2014_03_05_p21", "cmax"] <-        "1cmax" #p21 1cmax
+
+sum(is.na(raw.data$replID)) #0
+sum(is.na(raw.data$cmax)) #0
+unique(raw.data$cmax)
+
+unique(raw.data[ , c("plateID", "cell_line", "cmax", "replID")])
+
+sort( unique(raw.data$treatment))
+
+raw.data$treatment <- gsub("metformin ", "metformin", raw.data$treatment )
+
+# there are multiple & varying number of replicates, because manual inspection had shown failed experiments due to microscope crashes/ CO2 failure etc. after which experiments were repeated.
+# there are however, at least two replicates for all experiments (cell line dose combinations)
+
 ```
 
+Make sure concentrations are exactly the same  
+
+```{r fix_dose }
+
+raw.data<- as.data.table(raw.data)
+raw.data$comp_dose <- paste(raw.data$treatment, raw.data$dose_uM, sep="_")
+
+raw.data$dose_uM <- round(raw.data$dose_uM, digits = 4)
+
+ind.more10 <- raw.data$dose_uM >= 10
+raw.data$dose_uM[ind.more10] <- round(raw.data$dose_uM[ind.more10], digits = 1)
+ind.more1 <- raw.data$dose_uM >= 1
+raw.data$dose_uM[ind.more1] <- round(raw.data$dose_uM[ind.more1], digits = 2)
+
+
+# tabel met compound namen en concentraties maken
+raw.data[, comp_dose:= paste(treatment, dose_uM, sep ="_")]
+compDosetabel <- unique(raw.data[!cell_line %in% "ICAM1", list(treatment, cmax, dose_uM, comp_dose)])
+
+compDosetabel <- as.data.frame(compDosetabel)
+compDosetabel<- compDosetabel[ order(compDosetabel$treatment, compDosetabel$dose_uM),]
+# count how many doses each compound has and fix if incorrect
+
+compDosetabel$comp_dose <- paste(compDosetabel$treatment, compDosetabel$dose_uM, sep="_")
+comps <- unique(compDosetabel[ , c("treatment", "dose_uM", "cmax")])[ order(unique(compDosetabel$comp_dose)),  ]
+comps <- comps[ order(comps$treatment, comps$dose_uM),]
+tt <- ddply(comps, .(treatment), summarize, length(treatment))
+tt[ tt[, "..1"] >5,]
+
+
+# the newcmax compounds from plate p21_50Cmax are adjusted, these should therefor not be replaced later on when newcmax compounds are added.
 
 
 
+#fix compDosetabel, daarna merge operatie ervan uitgaande dat de cmax'n kloppen
+
+
+incDose <- comps[ comps$treatment %in%  c("digoxin","epinephrine", "haloperidol", "moxisylyte",
+                               "paroxetine","phenacetin", "propranolol","ribavirin",
+                               "simvastatin","sulindac", "tacrine", "ticlopidine"), ]
+incDose
+
+
+raw.data[ treatment == "digoxin" & dose_uM == 0.2830 & cmax == "100cmax", "dose_uM" ] <-0.2800
+raw.data[ treatment == "epinephrine" & dose_uM == 0.1763 & cmax == "100cmax", "dose_uM" ] <-0.1800
+raw.data[ treatment == "haloperidol" & dose_uM == 0.5321 & cmax == "100cmax", "dose_uM" ] <-0.53
+raw.data[ treatment == "moxisylyte" & dose_uM == 15.7000 & cmax == "100cmax", "dose_uM" ] <-15.8
+raw.data[ treatment == "paroxetine" & dose_uM == 3.0400 & cmax == "50cmax", "dose_uM" ] <-3.05
+raw.data[ treatment == "phenacetin" & dose_uM == 30.8000 & cmax == "50cmax", "dose_uM" ] <-31.0
+raw.data[ treatment == "propranolol" & dose_uM == 10.1000 & cmax == "50cmax", "dose_uM" ] <-10.0
+raw.data[ treatment == "ribavirin" & dose_uM == 130.6000 & cmax == "50cmax" , "dose_uM" ] <-130.7
+raw.data[ treatment == "simvastatin" & dose_uM == 4.1200 & cmax == "50cmax" , "dose_uM" ] <-4.1
+raw.data[ treatment == "sulindac" & dose_uM == 1599.2000 & cmax == "50cmax", "dose_uM" ] <-1599.3
+raw.data[ treatment == "tacrine" & dose_uM == 3.9800 & cmax == "50cmax", "dose_uM" ] <-4
+raw.data[ treatment == "ticlopidine" & dose_uM ==  403.7000 & cmax == "50cmax", "dose_uM" ] <- 403.8
+# wat niet klopt: 
+#digoxin 
+#epinephrine
+#haloperidol
+#moxisylyte
+#paroxetine
+#phenacetin
+#propranolol
+#ribavirin
+#simvastatin
+#sulindac
+#tacrine
+#ticlopidine
+
+raw.data$comp_dose <- NULL
+
+
+# lets have a look at the cmax dose_uM levels with respect to each other
+all.t<- unique(raw.data$treatment)
+k=NULL
+
+all.t <- all.t[!all.t %in% newcmaxcomps]
+
+
+for(i in seq_along(all.t)){
+  mdim <- dim(unique(raw.data[ raw.data$treatment == all.t[i] , list(dose_uM,cmax) ]))
+print(mdim)
+  if(mdim[1] != 5){
+    k = c(k, i)
+  }
+  } # 5 2 for all?
+
+# print unexpected compound dose #
+all.t[k]
+# for the control compounds (.._c) this makes sense. Also for dmso and dmem
+
+# for the new cmax compounds 6 are expected (updated new cmax for only 1 plate p21_50cmax)
+for(i in seq_along(newcmaxcomps)){
+  #print(i)
+  print(dim(unique(raw.data[ raw.data$treatment == newcmaxcomps[i] , list(dose_uM,cmax) ])))
+}
+ newcmaxcomps[15] # this concentration remained the same, but true analogue this time  
+
+ newcmaxcomps
+ for(i in seq_along(newcmaxcomps)){
+ print(newcmaxcomps[i])
+   print(unique(raw.data[ treatment == newcmaxcomps[i] & plateID == "p21_50Cmax", dose_uM]))
+ }
+ 
+ raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM := 275]
+  unique(raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM ])
+ raw.data[ treatment == "metformin" & plateID == "p21_50Cmax", dose_uM := 389]
+  unique(raw.data[ treatment == "metformin" & plateID == "p21_50Cmax", dose_uM ])
+ 
+ 
+ 
+
+```
+
+Change & select variable names  
+
+```{r transform_variable_names}
+
+# count number of treatments for all experiments
+
+raw.data[ , length(unique(treatment))  , by =  c("plateID", "replID", "cmax") ]
+
+
+unique(raw.data$variable)
+unique(raw.data[ plateID == "p21_50Cmax", variable])
+
+raw.data[ , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.5.1",
+                            "count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.51", variable)]
+
+
+raw.data[, ThreshN:= str_match(variable,"_larger_([0-9 .]{2,5})$")[,2]]
+
+unique(raw.data[, ThreshN])
+
+raw.data[, ThreshN:= as.numeric(ThreshN)]
+unique(raw.data$ThreshN)
+
+
+test<- ddply(raw.data, .(plateID), transform, isMin= ThreshN == min(ThreshN, na.rm=TRUE))
+
+test<- ddply(test, .(plateID), transform, isMax= ThreshN == max(ThreshN, na.rm=TRUE))
+
+test<- ddply(test, .(plateID), transform, isMiddle= ThreshN != max(ThreshN, na.rm=TRUE) & ThreshN!=min(ThreshN, na.rm=TRUE))
+
+####
+#2013-08-28 nii eruit vanwege duidelijke fouten, nog uitzoeken wat er aan de hand was
+test <- test[ test$plateID!="2013_08_28_nii_Srxn1",]
+
+test[1:300,]
+
+
+#change variables to consistent names
+
+test<-as.data.table(test)
+test[, variable:= gsub("obj_nc_", "Nuclei_", variable) ]
+test[, variable:= gsub("_img_gfp", "_Image_GFP", variable) ]
+  
+
+
+unique(test$variable)
+
+head(test)
+
+as.data.frame(unique(test[, list(plateID,variable, ThreshN, isMin,isMax, isMiddle)]))
+
+
+test[ isMin ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                        "count_Cyto.2m",variable)]
+test[ isMin ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                  "count_Nuclei.2m",variable)]
+
+
+test[ isMiddle ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                  "count_Cyto.3m",variable)]
+test[ isMiddle ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                 "count_Nuclei.3m",variable)]
+
+test[ isMax ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                     "count_Cyto.m3sd",variable)]
+test[ isMax ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                    "count_Nuclei.m3sd",variable)]
+is.data.table(test)
+unique(test$variable)
+
+# nog aanpassen
+test[, variable:= gsub("count_Cyto", "GFP_pos", variable)]
+test[, variable:= gsub("count_Nuclei", "GFP_pos", variable)]
+# maak grafiek, 3 cellijnen op 1 plot, eerst 3X bckground proberen
+
+
+unique(test$variable)
+
+
+test[, variable:= gsub("Nuclei_TrackObjects_DistanceTraveled_[0-9]{2}",
+                       "CellSpeed", variable)]
+
+test[, variable:= gsub("imageCountTracked",
+                       "CellNumber", variable)]
+
+unique(test[, variable])
+
+# make wide
+# calculate norm
+# make long
+
+test[, ThreshN:=NULL]
+test[, isMin:=NULL]
+test[, isMax:=NULL]
+test[, isMiddle:=NULL]
+test[, valueControl:=NULL]
+
+unique(test$variable)
+
+
+
+```
 
 ## Statistical learning; supervised classification  
 * DILI vs non-DILI  
