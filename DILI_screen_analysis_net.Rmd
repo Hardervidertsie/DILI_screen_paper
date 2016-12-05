@@ -14,7 +14,7 @@ output:
 
 
 ```{r session_options}
-options(stringsAsFactors = FALSE)
+#options(stringsAsFactors = FALSE)
 .libPaths("D:/apps/library_3.1.1") 
 ```
 
@@ -228,7 +228,7 @@ for( i in seq_along(ICAM.raw)) {
   }
 }
 all.columns <- lapply( lapply( sapply( ICAM.raw, '[', 1), '[', 1 ), colnames )
-all(sapply(all.columns, FUN = `%in%`, all.columns[[1]]))
+all(sapply(all.columns, FUN = `%in%`, all.columns[[1]])) # do all datasets contain the same set of columns?
 
 # columns of interest for counting cells
 TH.cols <- colnames(ICAM.raw[[1]]$myDT)[c(16, 17, 18, 19 )]
@@ -324,14 +324,11 @@ for(i in seq_along(ICAM.raw)) {
 
 
 
-
-
-
-
-Calculate mean of ICAM1 single cell data
+Calculate cell population means of ICAM1 single cell data for selected sets of features, mean based on levels;  
+`"treatment", "dose_uM", "cell_line", "plateID", "timeID", "timeAfterExposure"`
 
 ```{r mean_ICAM1_oldcmax}
-# calculate mean
+# calculate cell population means
 
 all.icam.feats<-c("imageCountTracked", "obj_icam1_AreaShape_Area",
              "obj_icam1_Intensity_IntegratedIntensity_image_GFP","obj_icam1_Intensity_MeanIntensity_image_GFP",
@@ -360,23 +357,147 @@ print(i)
 
 ```
 
+ICAM1: save single cell data & and remove from memory
+
+```{r save_singlecell_ICAM1}
+
+save( ICAM.raw, file = "../generated/ICAM.raw.Rdata")
+
+rm("ICAM.raw")
+gc()
+
+save( mean.data.ICAM1, file = "../tmp/mean.data.ICAM1.Rdata") # save to revert in case of error
+
+
+```
+
+Clean ICAM1 summary data  
+* replace new cmax compounds
+* fix some errors originating from original layout files
+* add cmax identifier  
+
+```{r clean_ICAM1_summarydata }
+
+load("../tmp/mean.data.ICAM1.Rdata")
+mean.data.ICAM1 <- do.call('rbind', mean.data.ICAM1)
+mean.data.ICAM1[, treatment := tolower(treatment)]
+#Carmustine 0.037 ipv 0.0356
+
+mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 0.356, dose_uM:= 0.037]
+mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 1.78, dose_uM:= 5*0.037]
+mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 3.56, dose_uM:= 10*0.037]
+mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 8.90, dose_uM:= 25*0.037]
+mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 17.80, dose_uM:= 50*0.037]
+mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 35.60, dose_uM:= 100*0.037]
+
+#new cmax have changed and 1 extra
+#1
+#5
+#10
+#25 <-- new (remove for this screen, as only small subset of compounds are tested at 25cmax)
+#50
+#100
+
+
+# replace old cmax for new.
+# plates with newCmax concentrations: 20150923_ICAM1 & 20150930_ICAM1
+
+newcmaxPlates <- mean.data.ICAM1[ plateID %in% c("20150923_ICAM1", "20150930_ICAM1" )]
+mean.data.ICAM1 <- mean.data.ICAM1[ !plateID %in% c("20150923_ICAM1", "20150930_ICAM1" )]
+newcmaxcomps <- unique(newcmaxPlates[, treatment])
+newcmaxcomps <- newcmaxcomps[ newcmaxcomps != "dmso"]
+newCmax <- as.data.table(
+  read.delim(file = "../metadata/newCmax.txt", sep = "\t", header = TRUE)) # load 1cmax concentrations of new cmax compound set 
+newCmax$treatment <- tolower(newCmax$treatment)
+cbind(sort(newCmax$treatment), sort(newcmaxcomps), sort(newCmax$treatment) == sort(newcmaxcomps))
+
+all(newcmaxcomps %in% unique(mean.data.ICAM1$treatment))
+
+mean.data.ICAM1 <- mean.data.ICAM1[!treatment %in% newcmaxcomps]
+
+# add cmax annotation for all compounds, plate identifiers can be used for old cmax, new cmax an annotation file is used.
+# add cmax identifiers  
+unique(mean.data.ICAM1[, plateID])
+mean.data.ICAM1[ grepl("- 1cMax", plateID), cmax := 1]
+mean.data.ICAM1[ grepl("- 5cMax", plateID), cmax := 5]
+mean.data.ICAM1[ grepl("- 10cMax", plateID), cmax := 10]
+mean.data.ICAM1[ grepl("- 50cMax", plateID), cmax := 50]
+mean.data.ICAM1[ grepl("- 100cMax", plateID), cmax := 100]
+mean.data.ICAM1[ ,cmax := factor(cmax, levels = c(1, 5, 10, 50 ,100)) ]
+unique(mean.data.ICAM1[ ,cmax ])
+
+# add cmax annotation for newcmax compounds
+newCmax$cmax <- 1
+colnames(newCmax) <- c("treatment", "dose_uM", "cmax")
+cmax5 <- newCmax
+cmax10 <- newCmax
+cmax25 <- newCmax
+cmax50 <- newCmax
+cmax100 <- newCmax
+
+cmax5$dose_uM<-newCmax$dose_uM*5
+cmax5$cmax <- 5
+cmax10$dose_uM<- newCmax$dose_uM*10
+cmax10$cmax<-10
+cmax25$dose_uM<- newCmax$dose_uM*25
+cmax25$cmax<-25
+cmax50$dose_uM <- newCmax$dose_uM*50
+cmax50$cmax<-50
+cmax100$dose_uM <- newCmax$dose_uM*100
+cmax100$cmax<-100
+
+newCmax<- rbind(newCmax,cmax5,cmax10, cmax25, cmax50, cmax100)
+newCmax<- as.data.table(newCmax)
+lapply(newCmax, class)
+class(newcmaxPlates$dose_uM)
+
+
+newcmaxPlates[ , treatment := as.character(treatment)]
+newcmaxPlates[ , dose_uM := as.character(dose_uM)]
+newCmax[ , treatment := as.character(treatment)]
+newCmax[ , dose_uM := as.character(dose_uM)]
+
+ind<-(newCmax$dose_uM %in% unique(newcmaxPlates$dose_uM))
+newCmax[!ind, ]
+
+ind2 <- unique(newcmaxPlates$dose_uM) %in% newCmax$dose_uM
+unique(newcmaxPlates$dose_uM)[!ind2] #the DMSO
+
+cbind( sort(newCmax[!ind, dose_uM ]), sort(unique(newcmaxPlates$dose_uM)[!ind2]))
+
+setkeyv(newcmaxPlates, c("treatment", "dose_uM") )
+setkeyv(newCmax, c("treatment", "dose_uM"))
+
+newcmaxPlates<-newCmax[newcmaxPlates]
+
+newcmaxPlates[ is.na(cmax) , 1:5]
+newcmaxPlates[treatment %in% "dmso", cmax := 0 ]
+
+
+
+new.cmaxICAM1.long<- melt(new.cmaxICAM1,  id.vars = c("treatment", "dose_uM","cmax", "cell_line", "plateID", "timeID", "timeAfterExposure"))
+head(new.cmaxICAM1.long)
+
+sum(is.na(new.cmaxICAM1.long[, cmax]))
+
+unique(new.cmaxICAM1.long[is.na(new.cmaxICAM1.long[, cmax]), cmax:=0.2])
+
+
+
+all.treats<-unique(new.cmaxICAM1.long[, treatment])
+
+
+new.cmaxICAM1.long.dmso0<- new.cmaxICAM1.long
+new.cmaxICAM1.long.dmso0<-as.data.table(new.cmaxICAM1.long.dmso0)
+new.cmaxICAM1.long.dmso0[ treatment %in% "DMSO", dose_uM:=0]
+all.icam.feats<- unique(new.cmaxICAM1.long.dmso0[, variable])
+new.cmaxICAM1.long.dmso0[, replID:= plateID]
+new.cmaxICAM1.long.dmso0[, plateID:= paste(plateID, cmax, sep="_")]
 
 
 
 
-
-
-
-
-
-
-
-
-```{r}
-
-
-
-
+```
 
 ## Summary data Srxn1, Chop, p21
 
