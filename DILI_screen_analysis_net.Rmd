@@ -15,7 +15,7 @@ output:
 
 ```{r session_options}
 #options(stringsAsFactors = FALSE)
-.libPaths("D:/apps/library_3.1.1") 
+
 ```
 
 
@@ -42,7 +42,7 @@ if(!require('rmarkdown')) { install.packages('rmarkdown') }
 
 load required packages  
 ```{r load_packages}
-
+update.packages(lib.loc=.libPaths()[1])
 require(data.table)
 require(ggplot2)
 require(plyr)
@@ -95,7 +95,8 @@ print(i)
 ICAM.raw[[i]] <- outputList
 ICAM.raw[[i]]$myDT$set <- "oldcmax"
   rm("outputList")
-  }
+}
+
 
 
 ```
@@ -152,7 +153,7 @@ ICAM.raw[[4]]$myDT$plateID[1]
 
 
 dim(ICAM.raw[[4]]$myDT)
-ICAM.raw[[4]]$myDT[, timeAfterExposure := as.numeric(timeAfterExposure)]
+ICAM.raw[[4]]$myDT[, timeAfterExposure := as.numeric(as.character(timeAfterExposure))]
 ICAM.raw[[4]]$myDT <- ICAM.raw[[4]]$myDT[ !( plateID %in% "20150608 - 10cMax_wells" &
                             timeAfterExposure %in% as.numeric( c(25.8, 27.2, 28.6, 30.0, 31.4, 32.8, 34.2, 35.6, 37.0, 38.4))) ,]
 
@@ -519,7 +520,7 @@ mean.data.ICAM1.long<- melt(mean.data.ICAM1,  id.vars = c("treatment", "dose_uM"
  mean.data.ICAM1.long[ plateID == "20150601 - 5cMax_wells", replID := "replicate_1"]  #icam1 5cmax repl1
  mean.data.ICAM1.long[ plateID == "20151231 - 5cMax_wells", replID := "replicate_2"]  #icam1 5cmax repl2
  mean.data.ICAM1.long[ plateID == "20150829 - 1cMax_wells", replID := "replicate_1"]  #icam1 1cmax repl1
- mean.data.ICAM1.long[ plateID == "20150914 - 1cMax_wells", replID := "replicate_1"]  #icam1 1cmax repl1
+ mean.data.ICAM1.long[ plateID == "20150914 - 1cMax_wells", replID := "replicate_2"]  #icam1 1cmax repl2
 
  unique(mean.data.ICAM1.long[ is.na(replID), plateID])
 mean.data.ICAM1.long[ plateID == "20150923_ICAM1", replID := "replicate_1"]  #icam1 new cmax repl1 
@@ -529,8 +530,30 @@ unique(mean.data.ICAM1.long[ cmax != "0" , list(plateID, cmax)])
 
 ```
 
+plots for quality control   
+```{r plotsQQ_ICAM1 }
 
+# plot time curves, grid the concentrations and treatments, loop over variables
 
+fingerprintVars <- unique(mean.data.ICAM1.long[ , variable])
+writepdfs <- "../generated/results/ICAM1_qqplots/"
+if(!file.exists(writepdfs)){
+  dir.create(writepdfs)
+}
+
+for( i in seq_along(fingerprintVars)){
+
+  plotData <- mean.data.ICAM1.long[ variable %in% fingerprintVars[i]]
+  
+  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
+  p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
+    theme_sharp() + ggtitle( label = fingerprintVars[i]) 
+  pdf(file = paste(writepdfs, fingerprintVars[i], ".pdf", sep =""), width =12, height = 100)
+  print(p)
+  dev.off()
+}
+
+```
 ## Summary data Srxn1, Chop, p21
 
 load summary data files from H5CellProfiler output for cell lines p21 srxn1 & chop  
@@ -572,9 +595,13 @@ timeBetweenFrames <- 0.983
 exposureDelay <- 0.333
 raw.data[[3]]$timeAfterExposure<- as.integer(raw.data[[3]]$timeID) * timeBetweenFrames + exposureDelay - timeBetweenFrames
 
-lapply(raw.data, ncol)
+which(unlist(lapply(raw.data, ncol)) != 9 )
 
+raw.data[[13]]$control <-1
 raw.data[[26]]$doseLevel <- NULL
+
+which(unlist(lapply(raw.data, ncol)) != 9 )
+
 
 raw.data <- do.call("rbind" ,raw.data)
 
@@ -587,6 +614,10 @@ head(raw.data)
 
 raw.data$variable <- gsub("_>_", "_larger_", raw.data$variable)
 raw.data$variable <- gsub("_<_", "_smaller_", raw.data$variable)
+raw.data$variable <- gsub("[_]{1}$", "", raw.data$variable)
+raw.data$variable <- gsub("[_]{1}$", "", raw.data$variable)
+
+unique(raw.data$variable)
 
 # fix cell line names
 unique(raw.data$cell_line)
@@ -711,6 +742,7 @@ unique(raw.data$cmax)
 
 unique(raw.data[ , c("plateID", "cell_line", "cmax", "replID")])
 
+
 sort( unique(raw.data$treatment))
 
 raw.data$treatment <- gsub("metformin ", "metformin", raw.data$treatment )
@@ -830,112 +862,324 @@ for(i in seq_along(newcmaxcomps)){
   unique(raw.data[ treatment == "metformin" & plateID == "p21_50Cmax", dose_uM ])
  
  
- 
+```
 
+
+Check for completeness of data  
+together with this data + after plotting data select 2 replicates of each cell line dose combination  
+```{r checkCompleteness}
+
+# count number of treatments for all experiments
+unique(raw.data[, plateID])
+unique(raw.data[ plateID =="2013_10_17_niii", list(cell_line, cmax)])
+
+raw.data[ , length(unique(treatment))  , by =  c("plateID", "replID", "cmax") ]
+# low treatment count for plate 2013_10_04_DDIT3
+all.treats <- unique(raw.data$treatment)
+
+indNotIn_2013_10_04_DDIT3  <- which(! all.treats %in% unique(raw.data[ plateID %in% "2013_10_04_DDIT3", treatment]) )
+all.treats[indNotIn_2013_10_04_DDIT3]
+
+# check missing treatments for all plates
+all.plates <- unique(raw.data[, plateID])
+missingTreat = alist()
+for( i in seq_along(all.plates)) {
+  ind  <- which(! all.treats %in% unique(raw.data[ plateID %in% all.plates[i], treatment]) )
+    tmp <- list( plate = all.plates[i], missingComps = all.treats[ind])
+    missingTreat[[i]] <- tmp
+  }
+# plates that contain missing (non _c) compounds:
+# 2013_07_10_Srxn1_z1 (121)
+# 2013_07_24_Srxn1 (63)
+# 2013_08_14_Srxn1 (10)
+missingTreat[[5]]
+# 2013_10_04_DDIT3 (16)
+missingTreat[[18]]
+# p21_50Cmax
+missingTreat[[36]]
+sort(unique(raw.data[ plateID == "p21_50Cmax", treatment]))
+
+rel.treats <- sort(unique(raw.data[ plateID == "p21_50Cmax", treatment]))
+
+missingTreatRel = alist()
+for( i in seq_along(all.plates)) {
+  ind  <- which(! rel.treats %in% unique(raw.data[ plateID %in% all.plates[i], treatment]) )
+    tmp <- list( plate = all.plates[i], missingComps = rel.treats[ind])
+    missingTreatRel[[i]] <- tmp
+  }
+
+# 2013_07_10_Srxn1_z1
+# 2013_07_24_Srxn1 
+# 2013_08_14_Srxn1 (5)
+# 2013_10_04_DDIT3
+
+unique(raw.data[plateID == "2013_08_14_Srxn1", list(cmax, plateID, cell_line)])
+unique(raw.data[cell_line == "Srxn1" & cmax == "100cmax", list(cmax, plateID, cell_line)])
+
+# prefered for Srxn1 100 cmax:
+#100cmax    2013_07_29_Srxn1     Srxn1
+#100cmax    2013_08_01_Srxn1     Srxn1
 ```
 
 Change & select variable names  
 
 ```{r transform_variable_names}
 
-# count number of treatments for all experiments
-
-raw.data[ , length(unique(treatment))  , by =  c("plateID", "replID", "cmax") ]
-
-
 unique(raw.data$variable)
-unique(raw.data[ plateID == "p21_50Cmax", variable])
+
+raw.data[, variable:= gsub("_obj_cyto_only_", "_Cytoplasm_", variable) ]
+raw.data[, variable:= gsub("_obj_nc_", "_Nuclei_", variable) ]
+raw.data[, variable:= gsub("_img_cyto", "_Image_GFP", variable) ]
+raw.data[, variable:= gsub("obj_nc_", "Nuclei_", variable) ]
+raw.data[, variable:= gsub("_img_gfp", "_Image_GFP", variable) ]
+
+raw.data[, variable:= gsub("obj_cyto_only_Intensity_IntegratedIntensity", "Cytoplasm_Intensity_IntegratedIntensity", variable) ]
 
 raw.data[ , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.5.1",
                             "count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.51", variable)]
 
+raw.data[ , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_81.708",
+                            "count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_81.71", variable)]
+
+
+
+
 
 raw.data[, ThreshN:= str_match(variable,"_larger_([0-9 .]{2,5})$")[,2]]
 
-unique(raw.data[, ThreshN])
+
+#unique(raw.data[, ThreshN])
 
 raw.data[, ThreshN:= as.numeric(ThreshN)]
-unique(raw.data$ThreshN)
+#unique(raw.data$ThreshN)
 
+raw.data<- ddply(raw.data, .(plateID), transform, isMin= ThreshN == min(ThreshN, na.rm=TRUE))
 
-test<- ddply(raw.data, .(plateID), transform, isMin= ThreshN == min(ThreshN, na.rm=TRUE))
+raw.data<- ddply(raw.data, .(plateID), transform, isMax= ThreshN == max(ThreshN, na.rm=TRUE))
 
-test<- ddply(test, .(plateID), transform, isMax= ThreshN == max(ThreshN, na.rm=TRUE))
-
-test<- ddply(test, .(plateID), transform, isMiddle= ThreshN != max(ThreshN, na.rm=TRUE) & ThreshN!=min(ThreshN, na.rm=TRUE))
-
-####
-#2013-08-28 nii eruit vanwege duidelijke fouten, nog uitzoeken wat er aan de hand was
-test <- test[ test$plateID!="2013_08_28_nii_Srxn1",]
-
-test[1:300,]
+raw.data<- ddply(raw.data, .(plateID), transform, isMiddle= ThreshN != max(ThreshN, na.rm=TRUE) & ThreshN!=min(ThreshN, na.rm=TRUE))
 
 
 #change variables to consistent names
 
-test<-as.data.table(test)
-test[, variable:= gsub("obj_nc_", "Nuclei_", variable) ]
-test[, variable:= gsub("_img_gfp", "_Image_GFP", variable) ]
-  
+raw.data<-as.data.table(raw.data)
 
+# as.data.frame(unique(raw.data[, list(plateID,variable, ThreshN, isMin,isMax, isMiddle)]))
 
-unique(test$variable)
-
-head(test)
-
-as.data.frame(unique(test[, list(plateID,variable, ThreshN, isMin,isMax, isMiddle)]))
-
-
-test[ isMin ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+raw.data[ isMin ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
                         "count_Cyto.2m",variable)]
-test[ isMin ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+
+raw.data[ isMin ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                  "count_Nuclei.2m",variable)]
+raw.data[ isMin ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_MeanIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
                                                                                   "count_Nuclei.2m",variable)]
 
+raw.data[ isMiddle ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}",                                                                                   "count_Cyto.3m",variable)]
 
-test[ isMiddle ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
-                                                                                  "count_Cyto.3m",variable)]
-test[ isMiddle ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+raw.data[ isMiddle ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                 "count_Nuclei.3m",variable)]
+raw.data[ isMiddle ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_MeanIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
                                                                                  "count_Nuclei.3m",variable)]
 
-test[ isMax ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+raw.data[ isMax ==TRUE  & !grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
                                                                                      "count_Cyto.m3sd",variable)]
-test[ isMax ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+
+raw.data[ isMax ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
                                                                                     "count_Nuclei.m3sd",variable)]
-is.data.table(test)
-unique(test$variable)
+raw.data[ isMax ==TRUE  & grepl("count_Nuclei_Intensity",variable) , variable:= gsub("count_Nuclei_Intensity_MeanIntensity_Image_GFP_larger_[0-9 .]{3,5}", 
+                                                                                    "count_Nuclei.m3sd",variable)]
 
-# nog aanpassen
-test[, variable:= gsub("count_Cyto", "GFP_pos", variable)]
-test[, variable:= gsub("count_Nuclei", "GFP_pos", variable)]
-# maak grafiek, 3 cellijnen op 1 plot, eerst 3X bckground proberen
+unique(raw.data$variable)
 
 
-unique(test$variable)
+raw.data[, variable:= gsub("count_Cyto", "GFP_pos", variable)]
+raw.data[, variable:= gsub("count_Nuclei", "GFP_pos", variable)]
 
-
-test[, variable:= gsub("Nuclei_TrackObjects_DistanceTraveled_[0-9]{2}",
+raw.data[, variable:= gsub("Nuclei_TrackObjects_DistanceTraveled_[0-9]{2}",
                        "CellSpeed", variable)]
 
-test[, variable:= gsub("imageCountTracked",
+raw.data[, variable:= gsub("imageCountTracked",
                        "CellNumber", variable)]
 
-unique(test[, variable])
+unique(raw.data$variable)
 
-# make wide
-# calculate norm
-# make long
-
-test[, ThreshN:=NULL]
-test[, isMin:=NULL]
-test[, isMax:=NULL]
-test[, isMiddle:=NULL]
-test[, valueControl:=NULL]
-
-unique(test$variable)
+raw.data[, ThreshN:=NULL]
+raw.data[, isMin:=NULL]
+raw.data[, isMax:=NULL]
+raw.data[, isMiddle:=NULL]
 
 
 
 ```
+
+
+plots for quality control (non icam1)  
+
+```{r plotQQ_srxn1_chop_p21}
+
+
+raw.data[ treatment == "dmso", cmax := "0cmax" ]
+raw.data[, cmax := factor(cmax, levels = c("0cmax", "1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
+
+
+# plot time curves, grid the concentrations and treatments, loop over variables
+raw.data[, variable_CL := paste0(variable, cell_line)]
+fingerprintVarsC <- unique(raw.data[ , variable_CL])
+writepdfs <- "../generated/results/nonicam_qqplots/"
+if(!file.exists(writepdfs)){
+  dir.create(writepdfs)
+}
+
+for( i in seq_along(fingerprintVarsC)){
+
+  plotData <- raw.data[ variable_CL %in% fingerprintVarsC[i]]
+  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
+  p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
+    theme_sharp() + ggtitle( label = fingerprintVarsC[i])
+  pdf(file = paste(writepdfs, fingerprintVarsC[i], ".pdf", sep =""), width =12, height = 100)
+  print(p)
+  dev.off()
+}
+
+
+
+```
+
+Select plates with full compound sets.
+Verify features acros plates/ replicates: each feature of interest should be represented by 2 replicates.   
+
+2013_07_29_Srxn1 : no CO2 - verified by no to little responses compared to other replicates
+2013_07_24_Srxn1, 2013_07_10_Srxn1_z1: low compunds amount
+````{r selectplates}
+
+unique(raw.data[ order(cell_line, cmax,plateID, replID), list(cell_line, cmax,plateID, replID)])[ cmax != "0cmax",]
+# 3 10cmax Srxn1 replicates
+# 3 50cmax Srxn1 replicates
+# 3 50cmax DDIT3 replicates
+rm.plates <- c( "2013_07_10_Srxn1_z1", "2013_07_24_Srxn1", "2013_07_29_Srxn1")
+
+raw.data <- raw.data[ !plateID %in% rm.plates, ]
+
+raw.data[ cell_line == "Srxn1" & (cmax == "100cmax" | cmax == "0cmax") & plateID == "2013_08_01_Srxn1", replID := "replicate_1"]
+raw.data[ cell_line == "Srxn1" & (cmax == "100cmax"| cmax == "0cmax") & plateID == "2013_08_14_Srxn1", replID := "replicate_2"]
+
+# check variable names over replicates
+
+countFeats <- unique(raw.data[ order(cell_line, cmax,plateID, replID, variable), list(cell_line, cmax, variable, replID)])
+
+# by summarizing over replID, at least 2 N should appear for each feature of interest;
+
+countFeats[,list(cell_line, cmax, variable)][ ,.N , by = list(cell_line, cmax, variable)][ N < 2,]
+# no GFP signal responses required are < 2
+
+unique(raw.data$variable)
+ raw.data[ , fingerprints:= variable ]
+ raw.data[variable %in% "GFP_pos.m3sd", fingerprints:= paste(variable, cell_line, sep = "_")]
+ raw.data[variable %in% "GFP_pos.2m", fingerprints:= paste(variable, cell_line, sep = "_")]
+ raw.data[variable %in% "GFP_pos.3m", fingerprints:= paste(variable, cell_line, sep = "_")]
+ raw.data[variable %in% "Cytoplasm_Intensity_IntegratedIntensity_Image_GFP", fingerprints:= paste(variable, cell_line, sep = "_")]
+ raw.data[variable %in% "Cytoplasm_Intensity_MeanIntensity_Image_GFP", fingerprints:= paste(variable, cell_line, sep = "_")]
+ raw.data[variable %in% "Nuclei_Intensity_IntegratedIntensity_Image_GFP", fingerprints:= paste(variable, cell_line, sep = "_")]
+ raw.data[variable %in% "Nuclei_Intensity_MeanIntensity_Image_GFP", fingerprints:= paste(variable, cell_line, sep = "_")]
+ 
+ 
+ unique(raw.data[,fingerprints])
+ 
+```
+ 
+Normalization of reporter responses by min-max normalization; $$ y = \frac{ x - x_{min} }{x_{max} - x_{min}} $$ , with `x_min` and `x_max` plate-based. 
+This plate normalization is valid if the underlying assumption holds that positive and negative controls exist on each plate and behave similarly on a biological level accros plates.
+
+```{r }
+
+varsToNorm <- c("Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "Nuclei_Intensity_MeanIntensity_Image_Hoechst",
+                 "Nuclei_Intensity_MeanIntensity_Image_GFP_p21",
+                 "Cytoplasm_Intensity_MeanIntensity_Image_GFP_Srxn1", "Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1"
+ )
+# norFun performs the min max normalization on a per-replID basis, however first DMSO values are subtracted on a per-plate basis to control for plate-specific effects.
+
+test <- normFun(raw.data, normVar = "Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1")
+
+pdf('../tmp/testnorm.pdf' , width = 12, height = 100)
+p <- ggplot( data = test, aes(timeAfterExposure, value, color = replID)) + geom_point() + facet_grid(treatment ~ cmax)
+print(p)
+dev.off()
+
+test[value == 1,  ]
+
+normFun <- function(dataIn, normVar) {
+   
+   buffer <- dataIn[ fingerprints%in% normVar] # select 1 variable
+   #subtract DMSO per plate-time followed by min max single plate within replicates
+   meanDMSO <-  buffer[ treatment %in% "dmso"  ,  
+                        mean(value, na.rm=TRUE),
+                        by = c("plateID", "timeID")
+                        ]
+   
+   
+   setkeyv(meanDMSO, c("plateID", "timeID"))
+   setkeyv(buffer, c("plateID" ,"timeID"))
+   
+   buffer<- meanDMSO[buffer]
+   buffer[, DMSO_sub.value:= value - V1 ]
+   buffer[, value:=NULL]
+   buffer[, fingerprints:= paste("mmnDMSO.sub", normVar, sep ="_")]
+   buffer[, V1:=NULL]
+   
+   # min and max per replicate (because plates contain compound set for specific cmax's)
+   
+   minValue <- buffer[ , min(DMSO_sub.value, na.rm = TRUE), by = replID] 
+   maxValue <- buffer[ , max(DMSO_sub.value, na.rm = TRUE), by = replID]
+   
+   setkey(buffer, "replID")
+   setkey(minValue, "replID")
+   setkey(maxValue, "replID")
+   
+   buffer <- buffer[minValue]
+   buffer <- buffer[maxValue]
+   
+   setnames(buffer, "V1", "minValue")
+   setnames(buffer, "i.V1", "maxValue")
+   
+   buffer[, mmnvalue:= (DMSO_sub.value - minValue)/ 
+            (maxValue-minValue)]
+   
+   setnames(buffer, "mmnvalue", "value")
+   buffer[, DMSO_sub.value:=NULL]
+   buffer[, minValue:=NULL]
+   buffer[, maxValue:=NULL]
+   output <- buffer
+   return(output)  
+ }
+
+
+# perform min max normalization
+mmn.list = list()
+ for( i in seq_along(varsToNorm)){
+   
+   mmn.list[[i]] <- normFun(dataIn = raw.data, normVar = varsToNorm[i] )
+ }
+ 
+ mmn.df <- do.call("rbind", mmn.list)
+ 
+ 
+ head(mmn.df)
+ 
+ old.reporter.data <- rbind(raw.data, mmn.df)
+
+ save(old.reporter.data, file = '../tmp/oldreporterdata.Rdata'  )
+``` 
+
+As with the ICAM1 dataset, also Srxn1, p21 & Chop had several compounds of which cmax values were adjusted as required by the MIP-DILI project.
+
+```{r newcmax_reporters}
+
+
+
+``` 
+
+
+```{r }
 
 ## Statistical learning; supervised classification  
 * DILI vs non-DILI  
