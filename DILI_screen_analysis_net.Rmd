@@ -1252,8 +1252,6 @@ raw.data[, variable_CL:=NULL]
 
 unique(mean.data.ICAM1.long[, variable])
 
-mean.data.ICAM1.long[, fingerprints]
-
 dim(raw.data)
 dim(mean.data.ICAM1.long)
 
@@ -1287,33 +1285,131 @@ notFP <- c("CellNumber", "CellSpeed", "Nuclei_AreaShape_Area", "Nuclei_Intensity
 mean.data.ICAM1.long[ , fingerprints := variable]
 mean.data.ICAM1.long[ !variable %in% notFP  , fingerprints := paste(variable, cell_line, sep = "_") ]
 
+mean.data.ICAM1.long[cmax == 0, cmax := "0cmax"]
+mean.data.ICAM1.long[cmax == 1, cmax := "1cmax"]
+mean.data.ICAM1.long[cmax == 5, cmax := "5cmax"]
+mean.data.ICAM1.long[cmax == 10, cmax := "10cmax"]
+mean.data.ICAM1.long[cmax == 50, cmax := "50cmax"]
+mean.data.ICAM1.long[cmax == 100, cmax := "100cmax"]
+mean.data.ICAM1.long[, cmax:=factor(cmax)]
+
 all.data <- rbind(raw.data, mean.data.ICAM1.long)
 
 ```
 
 ## Quality control for nonICAM1 & ICAM1 data
 
-compound based quality control: autofluorescence; use compound based intensity distribution & compound based CellNumber & compound based Hoechst intensity
-
 plate based quality control: cell viability per plate, image segmentation; use CellNumber & Nuclei_AreaShape_Area
-
 plate based cell viability: check if cells are dying; use CellNumber, CellSpeed
 
+
+compound based quality control: autofluorescence; use compound based intensity distribution & compound based CellNumber & compound based Hoechst intensity
 PI endpoint data:  
 several times PI was added after live cell imaging to check for cell viability.  
-include PI-end point data for plate-based cell viability  
 include PI-end point data for compound-based cell viability  
 
 
-```{r QQ_plate_based}
-# first load the end-point PI data
+```{r QC_plate_based}
+# goal: what are the outliers on plate-to-plate basis and what is the cause?
+# create compound ordered box plots per QC-feature, facet over plates 
+
+if(!file.exists('../generated/results/plateQC')){
+  dir.create('../generated/results/plateQC')
+}
+
+# select QC feats and per plate-cell line 1 intensity measure
+plateQCfeats <- c("CellNumber", "Nuclei_Intensity_MeanIntensity_Image_Hoechst", "Nuclei_AreaShape_Area", "CellSpeed",
+                  "Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1",
+                  "Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3",
+                  "Nuclei_Intensity_MeanIntensity_Image_GFP_p21",
+                  "obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1")
+
+plateQC_data <- all.data[ fingerprints %in% plateQCfeats, ]
 
 
+
+for(i in seq_along(plateQCfeats)){
+# select feat and compound order
+  subsetPlateQC <- plateQC_data[ fingerprints == plateQCfeats[i], ]
+
+  subsetPlateQC[ , treatment := reorder(treatment, value, FUN = median) ]
+  subsetPlateQC[ , plateID := reorder(plateID, value, FUN = median) ]
+  
+  
+  pdf(file = paste0('../generated/results/plateQC/_plateQC_', plateQCfeats[i], '.pdf'), height = 200, width = 60)
+p <- ggplot(data = subsetPlateQC, aes( x = treatment, y = value)) + geom_boxplot() + facet_wrap( ~plateID, ncol = 1) + theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
+                                    colour = "grey50") ) 
+
+print(p)
+
+dev.off()
+
+}
+
+# based on plate-QC plots: remove outliers, re-do plotting cycle for more detail (y-axis zoom)
+
+# CellNumber: doxycycline & tetracycline & aflatoxin b1 100 uM: extreme high CellNumber counts in many plates (dozen interquantile ranges above)
+# Chop nuclei int: menadione autofl, doxorubicin, doxycycline. 2013_12_11_DDIT3: penicillamine  2013_11_27_DDIT3 carmustine
+
+all.data <- all.data[ treatment != 'doxycycline', ]
+all.data <- all.data[ treatment != 'tetracycline', ]
+all.data <- all.data[ !( treatment == 'aflatoxin b1' & dose_uM == 100), ]
+all.data <- all.data[ treatment != 'menadione', ]
+all.data <- all.data[ treatment != 'doxorubicin', ]
+all.data <- all.data[ !( treatment == 'penicillamine' & plateID == '2013_12_11_DDIT3'), ]
+all.data <- all.data[ !( treatment == 'carmustine' & plateID == '2013_11_27_DDIT3'), ]
+
+# replot data with extra underscore
+save(file = '../tmp/all.data.Rdata', all.data)
 ```
 
 
-```{r QQ_compound_based}
+summarize quality control data to value per treatment + cmax  
+
+```{r QC_compound_based}
 sort(unique(all.data[, fingerprints]))
+
+#load PI end point data
+PI.data <- as.data.table(
+  read.delim(file = '../data/summary data files cell death/oldAndNewCmaxCytotox21072016.txt', sep = '\t', header=TRUE)
+)
+PI.data <- PI.data[ fingerprints == "necrosis_pos", ]
+# summarize plateQCfeats and pi pos fraction in boxplots per treatment
+plot(density(PI.data[  , value]))
+
+PI.data <- PI.data[ , mean(value, na.rm = TRUE), by = c("fingerprints","treatment", "cmax")]
+
+# calculate mean of values over time  
+plateQC_data_mean <- plateQC_data[ , mean(value, na.rm = TRUE), by = c("fingerprints","treatment", "cmax")]
+
+
+# calculate direction of qc values over time
+
+model.results = list()
+lmFun <- function(x) {
+   lm( x$value ~ x$timeAfterExposure, data = x )$coefficients[2]
+}
+
+  
+for( i in seq_along(plateQCfeats)){
+
+  plateQC_data_sub <- plateQC_data[ fingerprints == plateQCfeats[i], ]
+  plateQC_data_list <- split(plateQC_data_sub, paste(
+  plateQC_data_sub$treatment, plateQC_data_sub$plateID, plateQC_data_sub$cmax, sep = '__'))
+
+ model.results[[i]] <- as.data.frame(unlist(lapply( plateQC_data_list, lmFun )))
+ model.results[[i]]$treatment <- lapply(strsplit( rownames(model.results[[i]]), split = '__'), '[[', 1)
+ model.results[[i]]$cmax <- lapply(strsplit( rownames(model.results[[i]]), split = '__'), '[[', 3)
+ model.results[[i]]$cmax <- gsub(".x\\$timeAfterExposure", "", model.results[[i]]$cmax)
+
+}
+length(model.results[[1]])
+class(model.results[[1]])
+
+model.results[[1]]
+model.results.t <- do.call('rbind', model.results)
+
+
 
 ```
 
@@ -1323,6 +1419,8 @@ This plate normalization is valid if the underlying assumption holds that positi
 
 ```{r }
 # min-max normalize intensity based data
+
+
 
 unique(raw.data[ , fingerprints])
 varsToNorm <- c("Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "Nuclei_Intensity_MeanIntensity_Image_Hoechst",
@@ -1406,10 +1504,6 @@ mmn.list = list()
 
 
 
-
-
-
-
 ## Statistical learning; supervised classification  
 `n` compounds X `p` fingerprints
 * include lipophilicity value of compounds (based on fda paper)  
@@ -1427,7 +1521,8 @@ Include variables:
 * Time course parameters: max slope, time to 2/3 max, max, ...
 * End-point PI
 * CellCount
-* dose response parameters
+* dose response parameters:  2m_srxn1_1cmax, 2m_srxn1_10cmax, etc
+* lowesteffeclevel: Srxn1_2m_loel (de waarden zijn de dose waar de srxn1 iets laat zien) (de gevoeligste meting pikt het meeste op)
 * CellSpeed
 
 ```{r prediction}
