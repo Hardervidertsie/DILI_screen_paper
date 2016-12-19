@@ -383,7 +383,7 @@ Clean ICAM1 summary data
 load("../tmp/mean.data.ICAM1.Rdata")
 mean.data.ICAM1 <- do.call('rbind', mean.data.ICAM1)
 mean.data.ICAM1[, treatment := tolower(treatment)]
-#Carmustine 0.037 ipv 0.0356
+#Carmustine 0.037 ipv 0.356
 
 mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 0.356, dose_uM:= 0.037]
 mean.data.ICAM1[ treatment%in% "carmustine" & dose_uM %in% 1.78, dose_uM:= 5*0.037]
@@ -1369,19 +1369,155 @@ summarize quality control data to value per treatment + cmax
 ```{r QC_compound_based}
 sort(unique(all.data[, fingerprints]))
 
-#load PI end point data
+#load PI end point data 
+# old part
 PI.data <- as.data.table(
-  read.delim(file = '../data/summary data files cell death/oldAndNewCmaxCytotox21072016.txt', sep = '\t', header=TRUE)
+  read.delim(file = '../data/summary data files cell death/cytotox Summary Data.txt', sep = '\t', header=TRUE)
 )
-PI.data <- PI.data[ fingerprints == "necrosis_pos", ]
-# summarize plateQCfeats and pi pos fraction in boxplots per treatment
-plot(density(PI.data[  , value]))
+unique(PI.data[ , variable])
+PI.data <- PI.data[variable == "count_PI_obj_masked_primaryID_AreaShape_Area.DIV.Nuclei_obj_AreaShape_Area_larger_0.02_",]
+PI.data[, variable := "necrosis_pos"]
+PI.data$treatment <- tolower(PI.data$treatment)
 
-PI.data <- PI.data[ , mean(value, na.rm = TRUE), by = c("fingerprints","treatment", "cmax")]
+# remove updated cmax compounds;
+PI.data <- PI.data[ !treatment %in% newcmaxcomps, ]
 
-# calculate mean of values over time  
-plateQC_data_mean <- plateQC_data[ , mean(value, na.rm = TRUE), by = c("fingerprints","treatment", "cmax")]
+# new part
+pncmax <- '../data/summary data files cell death/nieuwcmax CD summary data/'
+file.l <- dir(pncmax)
+PI.data_ncmax = alist()
+for( i in seq_along(file.l)){
+PI.data_ncmax[[i]] <- read.delim(file = paste0(pncmax, file.l[i]), sep = "\t", header = TRUE)
+}
 
+PI.data_ncmax <- do.call('rbind', PI.data_ncmax)
+PI.data_ncmax <- as.data.table(PI.data_ncmax)
+
+PI.data_ncmax <- PI.data_ncmax[ variable == "count_PI_masked_primaryID_AreaShape_Area.DIV.Nuclei_AreaShape_Area_larger_0.02" ]
+PI.data_ncmax[ , variable := 'necrosis_pos']
+PI.data_ncmax$treatment <- tolower(PI.data_ncmax$treatment)
+
+plot(density(PI.data_ncmax$value))
+lines(density(PI.data$value), col = 'red')
+
+PI.data[, cell_line := NULL]
+PI.data <- rbind(PI.data_ncmax, PI.data)
+
+# add cmax values to PI.data
+
+lookupcmax <- unique(all.data[ , list(treatment, cmax, dose_uM)])
+newCmax
+lookupcmax <- rbind(lookupcmax, newCmax)
+PI.data[, dose_uM := as.numeric(dose_uM)]
+lookupcmax[, dose_uM := as.numeric(dose_uM)]
+
+
+PI.data[, dose_uM := as.numeric(dose_uM)]
+PI.data$dose_uM <- round(PI.data$dose_uM, digits = 4)
+
+ind.more10 <- PI.data$dose_uM >= 10
+PI.data$dose_uM[ind.more10] <- round(PI.data$dose_uM[ind.more10], digits = 1)
+ind.more1 <- PI.data$dose_uM >= 1
+PI.data$dose_uM[ind.more1] <- round(PI.data$dose_uM[ind.more1], digits = 2)
+
+PI.data[, dose_uM := as.character(dose_uM)]
+lookupcmax[, dose_uM := as.character(dose_uM)]
+
+
+PI.data[, dose_uM := as.numeric(dose_uM)]
+PI.data[ treatment%in% "carmustine" & dose_uM %in% 0.356, dose_uM:= 0.037]
+PI.data[ treatment%in% "carmustine" & dose_uM %in% 1.78, dose_uM:= 5*0.037]
+PI.data[ treatment%in% "carmustine" & dose_uM %in% 3.56, dose_uM:= 10*0.037]
+PI.data[ treatment%in% "carmustine" & dose_uM %in% 8.90, dose_uM:= 25*0.037]
+PI.data[ treatment%in% "carmustine" & dose_uM %in% 17.80, dose_uM:= 50*0.037]
+PI.data[ treatment%in% "carmustine" & dose_uM %in% 35.60, dose_uM:= 100*0.037]
+
+
+lookupcmax[, dose_uM := as.numeric(dose_uM)]
+lookupcmax$dose_uM <- round(lookupcmax$dose_uM, digits = 4)
+
+ind.more10 <- lookupcmax$dose_uM >= 10
+lookupcmax$dose_uM[ind.more10] <- round(lookupcmax$dose_uM[ind.more10], digits = 1)
+ind.more1 <- lookupcmax$dose_uM >= 1
+lookupcmax$dose_uM[ind.more1] <- round(lookupcmax$dose_uM[ind.more1], digits = 2)
+
+lookupcmax[, dose_uM := as.character(dose_uM)]
+PI.data[, dose_uM := as.character(dose_uM)]
+
+setkeyv(lookupcmax, c("treatment", "dose_uM"))
+setkeyv(PI.data, c("treatment", "dose_uM"))
+
+lookupcmax[ cmax == 25, cmax := "25cmax"]
+
+PI.data <- lookupcmax[PI.data]
+
+
+PI.data[ treatment == "aflatoxin b1" & is.na(cmax), cmax := "100cmax" ]
+PI.data[ treatment == "digoxin" , cmax := "100cmax"]
+
+PI.data[ treatment == "doxorubicin" & dose_uM == 1.18, cmax := "1cmax"]
+PI.data[ treatment == "doxorubicin" & dose_uM == 5.92, cmax := "5cmax" ]
+PI.data[ treatment == "doxorubicin" & dose_uM == 11.8,  cmax := "10cmax"]
+PI.data[ treatment == "doxorubicin" & dose_uM == 59.1,  cmax := "50cmax"]
+PI.data[ treatment == "doxorubicin" & dose_uM == 118.3,  cmax := "100cmax"]
+
+
+PI.data[ treatment == "doxycycline" & dose_uM == 11.3, cmax := "1cmax"]
+PI.data[ treatment == "doxycycline" & dose_uM == 56.3, cmax := "5cmax" ]
+PI.data[ treatment == "doxycycline" & dose_uM == 112.6,  cmax := "10cmax"]
+PI.data[ treatment == "doxycycline" & dose_uM == 562.9,  cmax := "50cmax"]
+PI.data[ treatment == "doxycycline" & dose_uM == 1125.7,  cmax := "100cmax"]
+
+PI.data[ treatment == "epinephrine" & is.na(cmax), cmax := "100cmax" ]
+
+PI.data[ treatment == "haloperidol" & is.na(cmax), cmax := "100cmax"] 
+
+PI.data[ treatment == "menadione" & dose_uM == 2.5, cmax := "1cmax"]
+PI.data[ treatment == "menadione" & dose_uM == 12.5, cmax := "5cmax" ]
+PI.data[ treatment == "menadione" & dose_uM == 25,  cmax := "10cmax"]
+PI.data[ treatment == "menadione" & dose_uM == 125,  cmax := "50cmax"]
+PI.data[ treatment == "menadione" & dose_uM == 250,  cmax := "100cmax"]
+
+PI.data[ treatment == "moxisylyte" & is.na(cmax), cmax:= "100cmax" ]
+
+PI.data[ treatment == "propranolol" & is.na(cmax), cmax := "50cmax" ]
+
+PI.data[ treatment == "sulindac" & is.na(cmax), cmax := "50cmax" ]
+
+PI.data[ treatment == "tetracycline" & dose_uM == 21, cmax := "1cmax"]
+PI.data[ treatment == "tetracycline" & dose_uM == 104.8, cmax := "5cmax" ]
+PI.data[ treatment == "tetracycline" & dose_uM == 209.6,  cmax := "10cmax"]
+PI.data[ treatment == "tetracycline" & dose_uM == 1048.2,  cmax := "50cmax"]
+PI.data[ treatment == "tetracycline" & dose_uM == 2096.3,  cmax := "100cmax"]
+
+
+PI.data[ treatment == "tetracycline" , ] 
+
+
+PI.data[is.na(cmax)] 
+
+PI.data <- PI.data[ cmax != "25cmax", ]
+
+PI.data_mean <- PI.data[ , lapply(.SD, function(x) list( mean(x), sd(x)))[[1]],
+                                                  by = list(treatment, cmax,dose_uM, variable),
+                                                  .SDcols = "value"]
+
+setnames(PI.data_mean, old = c("variable", "V1", "V2"), new = c("fingerprints", "necrosis_pos", "sd"))
+
+
+plot(density(PI.data_mean[  , necrosis_pos]))
+
+
+# calculate mean of values over time from time plate quality control data  
+
+
+plateQC_data_mean <- plateQC_data[ , lapply(.SD, function(x) list( mean(x), sd(x)))[[1]],
+                                                  by = list(treatment, cmax, fingerprints),
+                                                  .SDcols = "value"]
+
+
+
+setnames(plateQC_data_mean, old = "V1", new = "value")
 
 # calculate direction of qc values over time
 
@@ -1401,14 +1537,37 @@ for( i in seq_along(plateQCfeats)){
  model.results[[i]]$treatment <- lapply(strsplit( rownames(model.results[[i]]), split = '__'), '[[', 1)
  model.results[[i]]$cmax <- lapply(strsplit( rownames(model.results[[i]]), split = '__'), '[[', 3)
  model.results[[i]]$cmax <- gsub(".x\\$timeAfterExposure", "", model.results[[i]]$cmax)
-
+ model.results[[i]]$fingerprints <- plateQCfeats[i]
 }
 length(model.results[[1]])
 class(model.results[[1]])
+dim(model.results[[1]])
+head(model.results[[1]])
 
-model.results[[1]]
+
 model.results.t <- do.call('rbind', model.results)
+model.results.t <- as.data.table(model.results.t)
+# calculate mean +sd for each compound - cmax combo (mean of slopes over plates)
+setnames(model.results.t, old = 'unlist(lapply(plateQC_data_list, lmFun))', new = 'change')
 
+mtcars.dt[, lapply(.SD, function(x) list(mean(x), median(x)))[[1]],
+            by="cyl", .SDcols=c("mpg")]
+
+model.results.t[, treatment := unlist(treatment)]
+model.results.t.mean <- model.results.t[ , lapply(.SD, function(x) list( mean(x), sd(x)))[[1]],
+                                                  by = list(treatment, cmax, fingerprints),
+                                                  .SDcols = "change"]
+
+setnames(model.results.t.mean, old = "V1", new = 'mean')
+setnames(model.results.t.mean, old = "V2", new = 'sd')
+
+# 3 datasets for QC
+model.results.t.mean  # time course derived slopes, mean over plates
+plateQC_data_mean # mean over plates & time of QC data TODO needs sd
+PI.data_mean # mean of PI data over plates
+
+
+# combine this data and create a QC - figure
 
 
 ```
