@@ -14,7 +14,7 @@ output:
 
 
 ```{r session_options}
-#options(stringsAsFactors = FALSE)
+options(stringsAsFactors = FALSE)
 
 ```
 
@@ -379,7 +379,7 @@ Clean ICAM1 summary data
 * add cmax identifier  
 
 ```{r clean_ICAM1_summarydata }
-
+rm(list=ls())
 load("../tmp/mean.data.ICAM1.Rdata")
 mean.data.ICAM1 <- do.call('rbind', mean.data.ICAM1)
 mean.data.ICAM1[, treatment := tolower(treatment)]
@@ -450,6 +450,9 @@ cmax100$cmax<-100
 
 newCmax<- rbind(newCmax,cmax5,cmax10, cmax25, cmax50, cmax100)
 newCmax<- as.data.table(newCmax)
+
+write.table(file = '../generated/newCmax.txt', newCmax, sep = "\t", col.names = TRUE)
+
 lapply(newCmax, class)
 class(newcmaxPlates$dose_uM)
 
@@ -539,7 +542,7 @@ plots for quality control
 
 fingerprintVars <- unique(mean.data.ICAM1.long[ , variable])
 writepdfs <- "../generated/results/ICAM1_qqplots/"
-if(!file.exists(writepdfs)){
+if(!dir.exists(writepdfs)){
   dir.create(writepdfs)
 }
 
@@ -820,11 +823,18 @@ unique(raw.data$cmax)
 
 # for newcmax data, add cmax on compound basis.
 unique(raw.data[ cmax == "none", plateID])
-newcmax.data <- raw.data[ cmax == "none",]
-raw.data <- raw.data[ cmax != "none",]
 
 
-#Carmustine 0.037 ipv 0.0356
+newcmax.data <- raw.data[ cmax == "none", ]
+raw.data <- raw.data[ cmax != "none", ]
+
+raw.data[treatment == "metformin ", treatment := "metformin"]
+
+# remove newcmaxcompounds from raw.data
+
+raw.data <- raw.data[!(treatment %in% newcmaxcomps), ]
+
+#Carmustine 0.037 ipv 0.356
 
 newcmax.data[, dose_uM := as.numeric(dose_uM)]
 newcmax.data[ treatment%in% "carmustine" & dose_uM %in% 0.356, dose_uM:= 0.037]
@@ -839,11 +849,12 @@ unique(newcmax.data$treatment)%in% newCmax$treatment # only dmso not
 newcmax.data[, dose_uM := as.character(dose_uM)]
 unique(newcmax.data$dose_uM)%in% newCmax$dose_uM # missing 1 (the dmso 0.2)
 newcmax.data[, cmax := NULL]
-newCmax <- as.data.table(
-  read.delim(file = "../metadata/newCmax.txt", sep = "\t", header = TRUE)) # load 1cmax concentrations of new cmax compound set 
-
+newCmax <- read.delim( file ='../generated/newCmax.txt', sep = "\t", header = TRUE) # load 1cmax concentrations of new cmax compound set 
+newCmax <- as.data.table(newCmax)
+newcmax.data[ , dose_uM := as.numeric(dose_uM)]
 setkeyv(newCmax, c("treatment", "dose_uM")) # this lookup file was generated earlier in the ICAM1 newcmax part
 setkeyv(newcmax.data, c("treatment", "dose_uM"))
+
 newcmax.data.cmax <- newCmax[newcmax.data]
 
 # add cmax for dmso
@@ -859,6 +870,8 @@ newcmax.data.cmax[ plateID == "20150923_P21_newCmax", replID := 'replicate_1' ]
 newcmax.data.cmax[ plateID == "20150930_P21_newCmax", replID := 'replicate_2' ]
 newcmax.data.cmax[ plateID == "20150923_SRXN1_newCmax", replID := 'replicate_1' ]
 newcmax.data.cmax[ plateID == "20150930_SRXN1_newCmax", replID := 'replicate_2' ]
+
+
 
 raw.data <- rbind(raw.data, newcmax.data.cmax)
 raw.data <- raw.data[ cmax != 25,]
@@ -989,14 +1002,13 @@ for(i in seq_along(newcmaxcomps)){
    print(unique(raw.data[ treatment == newcmaxcomps[i] & plateID == "p21_50Cmax", dose_uM]))
  }
  
- raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM := 275]
+  raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM := 275]
   unique(raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM ])
- raw.data[ treatment == "metformin" & plateID == "p21_50Cmax", dose_uM := 389]
+  raw.data[ treatment == "metformin" & plateID == "p21_50Cmax", dose_uM := 389]
   unique(raw.data[ treatment == "metformin" & plateID == "p21_50Cmax", dose_uM ])
  
-  
   for(i in seq_along(newcmaxcomps)){
- print(newcmaxcomps[i])
+   print(newcmaxcomps[i])
    print(length(unique(raw.data[ treatment == newcmaxcomps[i] & plateID %in% newcmaxplates, dose_uM])))
  }
  
@@ -1178,7 +1190,7 @@ raw.data[, cmax := factor(cmax, levels = c("0cmax", "1cmax", "5cmax", "10cmax", 
 raw.data[, variable_CL := paste0(variable, cell_line)]
 fingerprintVarsC <- unique(raw.data[ , variable_CL])
 writepdfs <- "../generated/results/nonicam_qqplots/"
-if(!file.exists(writepdfs)){
+if(!dir.exists(writepdfs)){
   dir.create(writepdfs)
 }
 
@@ -1313,7 +1325,7 @@ include PI-end point data for compound-based cell viability
 # goal: what are the outliers on plate-to-plate basis and what is the cause?
 # create compound ordered box plots per QC-feature, facet over plates 
 
-if(!file.exists('../generated/results/plateQC')){
+if(!dir.exists('../generated/results/plateQC')){
   dir.create('../generated/results/plateQC')
 }
 
@@ -1518,7 +1530,7 @@ plateQC_data_mean <- plateQC_data[ , lapply(.SD, function(x) list( mean(x), sd(x
 
 
 setnames(plateQC_data_mean, old = "V1", new = "value")
-
+setnames(plateQC_data_mean, old = "V2", new = "sd_value")
 # calculate direction of qc values over time
 
 model.results = list()
@@ -1563,11 +1575,14 @@ setnames(model.results.t.mean, old = "V2", new = 'sd')
 
 # 3 datasets for QC
 model.results.t.mean  # time course derived slopes, mean over plates
-plateQC_data_mean # mean over plates & time of QC data TODO needs sd
+plateQC_data_mean # mean over plates & time of QC data 
 PI.data_mean # mean of PI data over plates
 
+save( file = "../tmp/model.results.t.mean.Rdata", model.results.t.mean)
+save( file = "../tmp/plateQC_data_mean.Rdata", plateQC_data_mean)
+save( file = "../tmp/PI.data_mean.Rdata", PI.data_mean)
 
-# combine this data and create a QC - figure
+# combine this data and create a QC - figure (TODO)
 
 
 ```
@@ -1577,9 +1592,9 @@ This plate normalization is valid if the underlying assumption holds that positi
 
 
 ```{r }
+
 # min-max normalize intensity based data
-
-
+all.data
 
 unique(raw.data[ , fingerprints])
 varsToNorm <- c("Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "Nuclei_Intensity_MeanIntensity_Image_Hoechst",
@@ -1635,20 +1650,14 @@ normFun <- function(dataIn, normVar) {
    return(output)  
  }
 
-test <- normFun(raw.data, normVar = "Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1")
 
-pdf('../tmp/testnorm.pdf' , width = 12, height = 100)
-p <- ggplot( data = test, aes(timeAfterExposure, value, color = replID)) + geom_point() + facet_grid(treatment ~ cmax)
-print(p)
-dev.off()
 
-test[value == 1,  ]
 
 # perform min max normalization
 mmn.list = list()
  for( i in seq_along(varsToNorm)){
    
-   mmn.list[[i]] <- normFun(dataIn = raw.data, normVar = varsToNorm[i] )
+   mmn.list[[i]] <- normFun(dataIn = all.data, normVar = varsToNorm[i] )
  }
  
  mmn.df <- do.call("rbind", mmn.list)
@@ -1656,12 +1665,203 @@ mmn.list = list()
  
  head(mmn.df)
  
- nonICAM1reporter.data <- rbind(raw.data, mmn.df)
+ all.data.norm <- rbind(all.data, mmn.df)
+all.data.norm <- as.data.table(all.data.norm)
+ 
 
- save(nonICAM1reporter.data, file = '../tmp/oldreporterdata.Rdata'  )
+save( file = '../tmp/all.data.norm.Rdata', all.data.norm)
+
+
 ``` 
 
+# select features relevant for ML and plot  
 
+```{r select_feats_ML_plot }
+
+# combine above and below to 1 feature (for the 2m version)
+
+
+mean2above <- all.data.norm[ fingerprints %in% "mean2above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
+mean2bellow <- all.data.norm[ fingerprints %in% "mean2below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
+
+all(mean2above[, timeID] == mean2bellow[, timeID])
+GFP_dif.m2_ICAM1 <- cbind( mean2above, mean2bellow[, value])
+GFP_dif.m2_ICAM1[, GFP_dif.m2_ICAM1 := value - V2 ]
+summary(GFP_dif.m2_ICAM1$GFP_dif.m2_ICAM1)
+GFP_dif.m2_ICAM1$fingerprints <- "GFP_dif.m2_ICAM1"
+GFP_dif.m2_ICAM1[, V2:=NULL]
+GFP_dif.m2_ICAM1[, value:=NULL]
+
+setnames(GFP_dif.m2_ICAM1, "GFP_dif.m2_ICAM1", "value")
+GFP_dif.m2_ICAM1[, variable := NULL]
+
+
+fingerprints <- unique(all.data.norm[, fingerprints])
+selfingerprints <- fingerprints[ grepl("mmnDMSO.sub", fingerprints)]
+selfingerprints <- selfingerprints[ selfingerprints != "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_Hoechst" ]
+
+ML_data <- all.data.norm[ fingerprints %in% selfingerprints, ]
+unique(ML_data[, fingerprints])
+
+GFP_dif.m2_ICAM1
+ML_data[ , variable := NULL]
+ML_data <- rbind(ML_data, GFP_dif.m2_ICAM1)
+
+# select feats from quality control data for ML
+unique(model.results.t.mean[ , fingerprints ])  # time course derived slopes, mean over plates
+unique(plateQC_data_mean[ , fingerprints]) # mean over plates & time of QC data : nothing for ML
+PI.data_mean # mean of PI data over plates
+
+setnames(PI.data_mean, old = 'necrosis_pos', new = 'value')
+
+QCslope_data <- model.results.t.mean[ fingerprints %in% c( "CellNumber", "Nuclei_AreaShape_Area", 
+                                                           "Nuclei_Intensity_MeanIntensity_Image_Hoechst",
+                                                           "CellSpeed")]
+
+QCslope_data[, fingerprints := paste0('slope_', fingerprints )]
+setnames(QCslope_data, old = 'mean', new = 'value')
+
+QCslope_data[ , sd := NULL]
+PI.data_mean[ , sd := NULL]
+PI.data_mean[ , dose_uM := NULL]
+
+ML_data_QC <- rbind(QCslope_data, PI.data_mean)
+
+
+ML_data_QC[ cmax == "1", cmax := "1cmax"]
+ML_data_QC[ cmax == "5", cmax := "5cmax"]
+ML_data_QC[ cmax == "10", cmax := "10cmax"]
+ML_data_QC[ cmax == "50", cmax := "50cmax"]
+ML_data_QC[ cmax == "100", cmax := "100cmax"]
+
+ML_data_QC[ , cmax := factor(cmax, levels = c("0cmax","1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
+
+
+
+MLfingerprints <- unique(ML_data[, fingerprints])
+ML_QC_fingerprints <- unique(ML_data_QC[, fingerprints])
+
+# plot data, to check normalization + for ML selected QC
+
+writepdfs <- "../generated/results/ML_data_time/"
+if(!dir.exists(writepdfs)){
+  dir.create(writepdfs)
+}
+
+for( i in seq_along(MLfingerprints)){
+
+  plotData <- ML_data[ fingerprints %in% MLfingerprints[i]]
+  
+  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
+  p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
+    theme_sharp() + ggtitle( label = MLfingerprints[i]) 
+  pdf(file = paste(writepdfs, MLfingerprints[i], ".pdf", sep =""), width =12, height = 100)
+  print(p)
+  dev.off()
+
+  }
+
+writepdfs <- "../generated/results/ML_data_QC/"
+if(!dir.exists(writepdfs)){
+  dir.create(writepdfs)
+}
+
+for( i in seq_along(ML_QC_fingerprints)){
+
+  plotData <- ML_data_QC[ fingerprints %in% ML_QC_fingerprints[i]]
+  
+  p <- ggplot(data =plotData, aes(x= cmax, y=value )) + facet_wrap(~treatment)
+  p<-p + geom_point() + geom_line(aes(group=treatment)) + 
+    theme_sharp() + ggtitle( label = ML_QC_fingerprints[i]) 
+  pdf(file = paste(writepdfs, ML_QC_fingerprints[i], ".pdf", sep =""), width =30, height = 30)
+  print(p)
+  dev.off()
+
+  }
+
+
+
+
+```
+
+extract time dynamics features  
+
+```{r extract_time_dynamics_features }
+source('D://src/lss_fda/celloscillate.R')
+
+# first create a list with entries single time curves
+# testje op 1 time curve
+
+# some fixes of ML_data to enable single time curve defining
+ML_data[ treatment == "dmso", dose_uM := "0"]
+ML_data[ treatment == "dmso",]
+
+
+ML_data <- ML_data[ !grepl("_c$", treatment), ]
+ML_data <- ML_data[ treatment != "dmem", ]
+
+ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plateID)]
+
+ML_data[ ,.N , by = list(singleCurveName) ][N>40]
+
+# for dmso data there is no factor seperating the multiple well dmso treatments
+# calculate mean of wells on per plate basis for dmso
+ML_data[, singleCurveName:=NULL]
+
+dmso_data <- ML_data[ treatment == "dmso"]
+ML_data <- ML_data[ treatment != "dmso"]
+
+dmso_data <- dmso_data[ ,  mean(value), by = list(treatment, dose_uM, plateID, timeID, cell_line, timeAfterExposure, replID, cmax, fingerprints )]
+setnames(dmso_data, old = "V1", new = "value")
+ML_data <- rbind(ML_data, dmso_data)
+
+ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plateID)]
+ML_data[ ,.N , by = list(singleCurveName) ][N>40]
+
+all.singleCurveNames <- unique(ML_data[ , singleCurveName])
+
+
+
+testTrack <- ML_data[ singleCurveName %in% sample(all.singleCurveNames, 5)   ]
+testTrack <- split(testTrack, testTrack$singleCurveName)
+length(testTrack)
+
+pdf( "test.pdf", width = 6, height = 6)
+
+lapply( testTrack, function(x) celloscillate(Frame = x$timeAfterExposure, value = x$value, keepFrameTime = TRUE,
+              locationID = x$singleCurveName, timeInterval = NULL,aboveRegr = 5, suppresMaxFrames = 5,
+              slopeTH = 0.02,basisType = 'spline', plotFit = TRUE, plotDomains = FALSE, 
+               slopeDomain = c("00:00:00", "08:00:00"), timeToTH = c(0.2, 'absoluut'),
+              nbasis = 9, lambda = 10, THpeaks = 0.1, f = 0.4,
+               signal1 = NULL, signal2 = NULL, signal1TH = NULL, xCoord = NULL, yCoord = NULL, pix.x = NULL, pix.y=NULL, ylim = c(-1,1)) )
+dev.off()
+
+
+```
+
+plot time dynamics features dose-responses: decide on method to remove dose dimension but keep the dose information as intact as possible   likely solution is to expand the relevant variable X 5 (1 for each cmax) 
+
+for example: choose the value where the value is max over the difference cmax. Also include lowest obs cmax for measure.  
+This way the value itself for each compound is specified as max in dose-response. And also for each value the cmax where effect takes place.  
+Note the use of cmax ( as numerical values ) and not dose, as dose is wildly different per compound. And we are interested in when the reporters pick up effect as compared to in clinic cmax benchmark.  
+
+
+```{r }
+
+
+```
+
+
+ Combine data, annotate data, include solvability & daily dosage data  
+```{r }
+# combine data
+
+# annotate data
+
+# include solvability & daily dosage data
+
+
+```
 
 ## Statistical learning; supervised classification  
 `n` compounds X `p` fingerprints
@@ -1683,6 +1883,9 @@ Include variables:
 * dose response parameters:  2m_srxn1_1cmax, 2m_srxn1_10cmax, etc
 * lowesteffeclevel: Srxn1_2m_loel (de waarden zijn de dose waar de srxn1 iets laat zien) (de gevoeligste meting pikt het meeste op)
 * CellSpeed
+
+
+
 
 ```{r prediction}
 
