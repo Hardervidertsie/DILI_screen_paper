@@ -1698,7 +1698,12 @@ GFP_dif.m2_ICAM1[, variable := NULL]
 
 fingerprints <- unique(all.data.norm[, fingerprints])
 selfingerprints <- fingerprints[ grepl("mmnDMSO.sub", fingerprints)]
-selfingerprints <- selfingerprints[ selfingerprints != "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_Hoechst" ]
+selfingerprints <- selfingerprints[ !selfingerprints %in% c("mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_Hoechst",
+                                                            "mmnDMSO.sub_Cytoplasm_Intensity_MeanIntensity_Image_GFP_Srxn1")]
+selfingerprints <- c(selfingerprints, fingerprints[ grepl("2m", fingerprints)])
+
+
+# include counting feature for the reporters (2m or 3m)
 
 ML_data <- all.data.norm[ fingerprints %in% selfingerprints, ]
 unique(ML_data[, fingerprints])
@@ -1815,26 +1820,58 @@ dmso_data <- dmso_data[ ,  mean(value), by = list(treatment, dose_uM, plateID, t
 setnames(dmso_data, old = "V1", new = "value")
 ML_data <- rbind(ML_data, dmso_data)
 
-ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plateID)]
+ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plateID, sep = "__")]
 ML_data[ ,.N , by = list(singleCurveName) ][N>40]
 
 all.singleCurveNames <- unique(ML_data[ , singleCurveName])
 
+allml <- na.omit(ML_data)
+allml <- split( allml, allml$singleCurveName)
 
 
-testTrack <- ML_data[ singleCurveName %in% sample(all.singleCurveNames, 5)   ]
-testTrack <- split(testTrack, testTrack$singleCurveName)
-length(testTrack)
+pdf( "../generated/results/ML_time_fits.pdf", width = 6, height = 6)
 
-pdf( "test.pdf", width = 6, height = 6)
-
-lapply( testTrack, function(x) celloscillate(Frame = x$timeAfterExposure, value = x$value, keepFrameTime = TRUE,
+output <- lapply( allml, function(x) celloscillate(Frame = x$timeAfterExposure, value = x$value, keepFrameTime = TRUE,
               locationID = x$singleCurveName, timeInterval = NULL,aboveRegr = 5, suppresMaxFrames = 5,
               slopeTH = 0.02,basisType = 'spline', plotFit = TRUE, plotDomains = FALSE, 
-               slopeDomain = c("00:00:00", "08:00:00"), timeToTH = c(0.2, 'absoluut'),
-              nbasis = 9, lambda = 10, THpeaks = 0.1, f = 0.4,
+               slopeDomain = c("00:00:00", "08:00:00"), timeToTH = c(0.2, 'absoluut'), maxValueTime = TRUE,
+              nbasis = 13, lambda = 1, THpeaks = 0.1, f = 0.4,
                signal1 = NULL, signal2 = NULL, signal1TH = NULL, xCoord = NULL, yCoord = NULL, pix.x = NULL, pix.y=NULL, ylim = c(-1,1)) )
 dev.off()
+
+
+names(output)
+names(output[[4]])
+# select: maxslope maxvalue slopeDomain timeToTH
+# maxslope
+# maxvalue
+# slopeDomain: (mean slope between 0 and 8 hours)
+# timeToTH: time that absoluut value of response is greater than 0.2
+# maxValueTime: time where max value is reached
+
+
+# to extract for example all perpeak_peakwidths do
+ maxValueTime <- lapply(output, '[[', 'maxValueTime' )
+
+
+ # format into a usefull table
+maxValueTime <- data.frame(maxValueTime = unlist(maxValueTime),
+                           maxslope = unlist(maxslope))
+
+
+well_names <- unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 1 ))
+treatment_names <- unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 2 ))
+dose_names <-  unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 3 ))
+buffer <- unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 4 ))
+track_names <- unlist(lapply( strsplit(buffer, "\\."), "[[", 1 ))
+piek_names <- unlist(lapply( strsplit(buffer, "\\."), "[[", 2 ))
+
+nette_tabel$well_names <- well_names
+nette_tabel$treatment_names <- treatment_names
+nette_tabel$dose_names <- dose_names
+nette_tabel$track_names <- track_names
+nette_tabel$piek_names <- piek_names
+
 
 
 ```
@@ -1846,10 +1883,27 @@ This way the value itself for each compound is specified as max in dose-response
 Note the use of cmax ( as numerical values ) and not dose, as dose is wildly different per compound. And we are interested in when the reporters pick up effect as compared to in clinic cmax benchmark.  
 
 
-```{r }
+```{r plot_dose_response}
+GFP_data[, cmax :=factor(cmax, levels = c("1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
+
+for( j in seq_along( keepFP )) {
+  plotData <- GFP_data[ fingerprints %in% keepFP[ j]]
+  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value)) + facet_grid(treatment ~ cmax, scales = "free_x")
+  p<-p + geom_point(aes(color=replID, shape = replID)) +geom_line(aes(group=replID, color=replID)) + theme_sharp() + theme(strip.text.y = element_text(angle=0))
+  pdf(file = paste(writepdfs, "_", keepFP[j], ".pdf", sep =""), width =20, height = 120)
+  print(p)
+  dev.off()
+}l
+
+```
+
+Select cmax data: max observations, also lowest observed effect level (loel) (decide which based on graphs)
+
+```{r select_cmax}
 
 
 ```
+
 
 
  Combine data, annotate data, include solvability & daily dosage data  
