@@ -1831,48 +1831,87 @@ allml <- split( allml, allml$singleCurveName)
 
 pdf( "../generated/results/ML_time_fits.pdf", width = 6, height = 6)
 
-output <- lapply( allml, function(x) celloscillate(Frame = x$timeAfterExposure, value = x$value, keepFrameTime = TRUE,
+output <- lapply( allml, function(x) celloscillate(Frame = x$timeAfterExposure, value = x$value,  keepFrameTime = TRUE,
               locationID = x$singleCurveName, timeInterval = NULL,aboveRegr = 5, suppresMaxFrames = 5,
               slopeTH = 0.02,basisType = 'spline', plotFit = TRUE, plotDomains = FALSE, 
-               slopeDomain = c("00:00:00", "08:00:00"), timeToTH = c(0.2, 'absoluut'), maxValueTime = TRUE,
+               slopeDomain = c("00:00:00", "08:00:00"), slopeDomain2 = c("08:00:00", "24:00:00"), timeToTH = c(0.2, 'absoluut'), maxValueTime = TRUE,
               nbasis = 13, lambda = 1, THpeaks = 0.1, f = 0.4,
                signal1 = NULL, signal2 = NULL, signal1TH = NULL, xCoord = NULL, yCoord = NULL, pix.x = NULL, pix.y=NULL, ylim = c(-1,1)) )
 dev.off()
 
 
-names(output)
+head(names(output))
 names(output[[4]])
-# select: maxslope maxvalue slopeDomain timeToTH
+# select: maxslope + maxvalue + slopeDomain + slopeDomain2 + timeToTH + maxValueTime + valueStart + valueEnd
+
 # maxslope
 # maxvalue
 # slopeDomain: (mean slope between 0 and 8 hours)
+# slopeDomain: (mean slope between 8 and 24 hours)
 # timeToTH: time that absoluut value of response is greater than 0.2
 # maxValueTime: time where max value is reached
+# valueStart: usefull for QC
+# valueEnd: 
+
 
 
 # to extract for example all perpeak_peakwidths do
  maxValueTime <- lapply(output, '[[', 'maxValueTime' )
-
-
+ maxslope <- lapply( output, '[[', 'maxslope')
+ maxvalue <- lapply( output, '[[', 'maxvalue')
+ slopeDomain <- lapply( output, '[[', 'slopeDomain')
+ slopeDomain2 <- lapply( output, '[[', 'slopeDomain2')
+ timeToTH <- lapply( output, '[[', 'timeToTH')
+ valueStart <- lapply( output, '[[', 'valueStart')
+ valueEnd <- lapply( output, '[[', 'valueEnd')
+ timeDomain <- lapply( output, '[[', 'timedomain')
+ timeDomain <- sapply(timeDomain, '[[', 2)
+ 
  # format into a usefull table
-maxValueTime <- data.frame(maxValueTime = unlist(maxValueTime),
-                           maxslope = unlist(maxslope))
 
 
-well_names <- unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 1 ))
-treatment_names <- unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 2 ))
-dose_names <-  unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 3 ))
-buffer <- unlist(lapply( strsplit(rownames(nette_tabel), "__"), "[[", 4 ))
-track_names <- unlist(lapply( strsplit(buffer, "\\."), "[[", 1 ))
-piek_names <- unlist(lapply( strsplit(buffer, "\\."), "[[", 2 ))
-
-nette_tabel$well_names <- well_names
-nette_tabel$treatment_names <- treatment_names
-nette_tabel$dose_names <- dose_names
-nette_tabel$track_names <- track_names
-nette_tabel$piek_names <- piek_names
+length(unlist(maxValueTime)) == length(unlist(maxValueTime)) 
+length(unlist(maxValueTime)) == length(unlist(maxvalue))
+length(unlist(maxvalue)) == length(unlist(slopeDomain))
+length(unlist(slopeDomain)) == length(unlist(timeToTH))
+length(unlist(timeToTH)) == length(unlist(slopeDomain2))
+length(unlist(slopeDomain2)) == length(unlist(valueStart))
+length(unlist(valueStart)) == length(unlist(valueEnd))
 
 
+
+
+timedynamics_feats <- data.frame(maxValueTime = unlist(maxValueTime),
+                           maxSlope = unlist(maxslope),
+                           maxValue = unlist(maxvalue),
+                           slopeDomain = unlist(slopeDomain),
+                           slopeDomain2 = unlist(slopeDomain2),
+                           timeToTH = unlist(timeToTH),
+                           valueStart = unlist(valueStart),
+                           valueEnd = unlist(valueEnd),
+                           timeDomain = timeDomain )
+
+timedynamics_feats$timeToTH[is.na(timedynamics_feats$timeToTH)] <- timedynamics_feats$timeDomain[is.na(timedynamics_feats$timeToTH)]
+
+lapply(timedynamics_feats, function(x) any(is.na(x)))
+
+sum(is.na(timedynamics_feats$slopeDomain)) # these are the missing start curves. 
+
+
+feature_names <- unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 1 ))
+treatment_names <- unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 2 ))
+cmax_names <-  unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 3 ))
+rep_names <-  unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 4 ))
+
+
+timedynamics_feats$feature_names <- feature_names
+timedynamics_feats$treatment_names <- treatment_names
+timedynamics_feats$cmax_names <- cmax_names
+timedynamics_feats$rep_names <- rep_names
+
+head(timedynamics_feats)
+
+save(timedynamics_feats, file = '../tmp/timedynamics_feats.Rdata')
 
 ```
 
@@ -1883,17 +1922,42 @@ This way the value itself for each compound is specified as max in dose-response
 Note the use of cmax ( as numerical values ) and not dose, as dose is wildly different per compound. And we are interested in when the reporters pick up effect as compared to in clinic cmax benchmark.  
 
 
-```{r plot_dose_response}
-GFP_data[, cmax :=factor(cmax, levels = c("1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
+```{r plot_dose_response_timedynamics}
 
-for( j in seq_along( keepFP )) {
-  plotData <- GFP_data[ fingerprints %in% keepFP[ j]]
-  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value)) + facet_grid(treatment ~ cmax, scales = "free_x")
-  p<-p + geom_point(aes(color=replID, shape = replID)) +geom_line(aes(group=replID, color=replID)) + theme_sharp() + theme(strip.text.y = element_text(angle=0))
-  pdf(file = paste(writepdfs, "_", keepFP[j], ".pdf", sep =""), width =20, height = 120)
+writepdfs <- "../generated/results/ML_data_dose_time_dynamics/"
+if(!dir.exists(writepdfs)){
+  dir.create(writepdfs)
+}
+
+
+timedynamics_feats <- data.table(timedynamics_feats)
+
+
+timedynamics_feats_long <- melt(timedynamics_feats, id.vars = c('feature_names', 'treatment_names', 'cmax_names', 'rep_names'))
+timedynamics_feats_long[ , fingerprints := paste(feature_names, variable, sep = '_')]
+ML_td_fingerprints <- unique(timedynamics_feats_long[, fingerprints])
+
+for( i in seq_along(ML_td_fingerprints)){
+
+  plotData <- timedynamics_feats_long[ fingerprints %in% ML_td_fingerprints[i], ]
+  plotData[ , cmax := factor(cmax_names, levels = c('0cmax', '1cmax', '5cmax', '10cmax', '50cmax', '100cmax'))]
+  
+  p <- ggplot(data =plotData, aes(x= cmax, y=value, color = rep_names )) + facet_wrap(~treatment_names)
+  p<-p + geom_point() + geom_line(aes(group=rep_names)) + 
+    theme_sharp() + ggtitle( label = ML_td_fingerprints[i]) 
+  pdf(file = paste(writepdfs, ML_td_fingerprints[i], ".pdf", sep =""), width =50, height = 30)
   print(p)
   dev.off()
-}l
+
+  }
+
+# remove based on QC plots and remove based on QC values
+
+timedynamics_feats[, timeDomain:= NULL] 
+timedynamics_feats[ valueStart > 0.3, ] 
+timedynamics_feats[ is.na(slopeDomain), ] 
+
+
 
 ```
 
