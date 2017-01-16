@@ -2367,37 +2367,67 @@ fitControl <- trainControl(method = "repeatedcv",
                            summaryFunction = twoClassSummary)
 
 #ML_data_final_data_sel <- ML_data_final_data
+
+ML_data_final_data_sel <- hm_data
 ML_data_final_data_sel$DILIConcern
-ML_data_final_data_sel[DILIConcern == "DILI-Concern", DILIConcern := "DILI"]
+
+
 ML_data_final_data_sel[DILIConcern == "No-DILI-Concern", DILIConcern := "noDILI"]
-(ML_data_final_data_sel[, DILIConcern := factor(DILIConcern) ])
+
+ML_data_final_data_sel[DILIConcern == "Most-DILI-Concern", DILIConcern := "DILI"]
+
+ML_data_final_data_sel <- ML_data_final_data_sel[ DILIConcern %in% c("noDILI", "DILI")]
+
 ML_data_final_data_sel[, DILIConcern]
 
-nobs <- nrow(ML_data_final_data_sel)
-trainInd <- sample(1:nobs, 0.5*nobs, replace=FALSE)
+ML_data_final_data_sel[, DILIConcern := factor(DILIConcern) ]
+table(ML_data_final_data_sel[, DILIConcern])
 
-mylist = list()
-for(i in seq_along(1:25)){
+
+nobs <- nrow(ML_data_final_data_sel)
+trainInd <- sample(1:nobs, 0.7*nobs, replace=FALSE)
+
+testlist = list()
+
+for( i in 1:100) {
 train1 <- which(ML_data_final_data_sel$DILIConcern == "DILI")
 train2 <-  which(ML_data_final_data_sel$DILIConcern == "noDILI")
 
-train1 <- sample(train1, 30, replace = FALSE)
-train2 <- sample(train2, 20, replace = FALSE)
+train1 <- sample(train1, 10, replace = FALSE)
+train2 <- sample(train2, 10, replace = FALSE)
 
 trainInd <- c(train1, train2)
 
-table(ML_data_final_data_sel[trainInd , DILIConcern])
-table(ML_data_final_data_sel[-trainInd , DILIConcern])
+#table(ML_data_final_data_sel[trainInd , DILIConcern])
+#table(ML_data_final_data_sel[-trainInd , DILIConcern])
 
 #ML_data_final_data_sel[, dummy := NULL]
 #ML_data_final_data_sel[, treatment := NULL]
+# ML_data_final_data_sel[1:5,1:10]
+# 
+# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(1,2)]
+# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(2,6)]
+# 
+# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(2,4)]
+# 
+# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(2,4)]
+# 
+# ML_data_final_data_sel[, cmax := as.numeric(cmax)]
+
+
+#ML_data_final_data_sel[ , dummy := as.numeric(DILIConcern) + runif(nrow(ML_data_final_data_sel))]
+#ML_data_final_data_sel[, dummy := NULL]
+
 
 svmFit <- train( DILIConcern~ ., data = ML_data_final_data_sel[ trainInd, ], 
-                 method = "svmRadial", degree = 3,
+                 method = "svmRadial",
                  trControl = fitControl, 
-                 preProc = c("center", "scale"),
+                 preProc = "keep",
                  tuneLength = 8,
                  metric = "ROC")
+
+
+
 #save(svmFit, file = "svmFit_ROC.Rdata")
 #svmFit   Spec Sens ROC
 
@@ -2405,9 +2435,54 @@ svmFit <- train( DILIConcern~ ., data = ML_data_final_data_sel[ trainInd, ],
 
 #plot(ML_data_final_annot$DILIConcern, ML_data_final_data_sel[, GFP_pos.2m_Srxn1_maxValue_100cmax])
 
-mylist[[i]] <- table(data.frame(predict = as.character(predict(svmFit, newdata = ML_data_final_data_sel[-trainInd,] )), data = as.character(ML_data_final_data_sel$DILIConcern[-trainInd])))
+
+
+testlist[[i]] <- table(data.frame(predict = as.character(predict(svmFit, newdata = abs(ML_data_final_data_sel[-trainInd,] ))), data = as.character(ML_data_final_data_sel$DILIConcern[-trainInd])))
 
 }
+
+
+for( i in seq_along(testlist)){
+
+if( nrow(testlist[[i]]) == 1) {
+if(rownames(testlist[[]]) != "DILI"){
+  stop("df")
+}
+testlist[[i]] <- rbind(testlist[[i]], c(0,0))  
+rownames(testlist[[i]])[2] <- "noDILI"
+class(testlist[[i]]) <- "table"
+    }
+}
+warnings()
+
+spec = list()
+for( i in seq_along(testlist)){
+spec[[i]] <- sum(diag(testlist[[i]]))/ sum(testlist[[i]])
+}
+
+pos_pred = list()
+for( i in seq_along(testlist)){
+pos_pred[[i]] <- testlist[[i]][1,1] / (sum(testlist[[i]][,1]))
+}
+
+neg_pred = list()
+for( i in seq_along(testlist)){
+neg_pred[[i]] <- testlist[[i]][2,2] / (sum(testlist[[i]][,2]))
+}
+
+mean(unlist(spec)) # 0.82 accuracy
+random : 5/6 
+mean(unlist(pos_pred))  # 0.972
+mean(unlist(neg_pred)) # 0.06
+
+
+
+
+write.table(as.data.frame(testlist), sep = "\t", file = "result_pred.txt")
+
+test <- as.data.frame(testlist)
+
+
 save(mylist, file = "radial_ROC.Rdata")
 
 
@@ -2604,81 +2679,208 @@ Main gevoelige-responses van elke reporter
 Ergste oplosbare verwijderen.
 DILI annotatie
 
+
+
 ```{r heatmap}
-load(file = "../tmp/ML_data_final.Rdata")
-colnames(ML_data_final)
+rm("all.data.norm")
+load('../tmp/all.data.norm.Rdata')
+colnames(all.data.norm)
+unique(all.data.norm[, fingerprints])
+all.data.norm[, variable:=NULL]
+# add ICAM1 total fractions:
 
-# select columns 2m for each reporter
+mean1above <- all.data.norm[ fingerprints %in% "mean1above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
+mean1bellow <- all.data.norm[ fingerprints %in% "mean1below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
 
-indMaxV <- grepl("_maxMagnitudeValue_",  colnames(ML_data_final))
+all(mean1above[, timeID] == mean1bellow[, timeID])
+GFP_dif.m1_ICAM1 <- cbind( mean1above, mean1bellow[, value])
+GFP_dif.m1_ICAM1[, GFP_dif.m1_ICAM1 := value - V2 ]
+summary(GFP_dif.m1_ICAM1$GFP_dif.m1_ICAM1)
+GFP_dif.m1_ICAM1$fingerprints <- "GFP_dif.m1_ICAM1"
+GFP_dif.m1_ICAM1[, V2:=NULL]
+GFP_dif.m1_ICAM1[, value:=NULL]
 
-colnames(ML_data_final)[indMaxV]
+setnames(GFP_dif.m1_ICAM1, "GFP_dif.m1_ICAM1", "value")
+all.data.norm <- rbind( all.data.norm, GFP_dif.m1_ICAM1 )
 
-ML_data_final[1:5,1:11]
-hm_data <- ML_data_final[, indMaxV, with = FALSE]
+# for mean 2
+mean2above <- all.data.norm[ fingerprints %in% "mean2above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
+mean2bellow <- all.data.norm[ fingerprints %in% "mean2below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
 
-hm_data <- cbind(ML_data_final[ , 1:10], hm_data)
+all(mean2above[, timeID] == mean2bellow[, timeID])
+GFP_dif.m2_ICAM1 <- cbind( mean2above, mean2bellow[, value])
+GFP_dif.m2_ICAM1[, GFP_dif.m2_ICAM1 := value - V2 ]
+summary(GFP_dif.m2_ICAM1$GFP_dif.m2_ICAM1)
+GFP_dif.m2_ICAM1$fingerprints <- "GFP_dif.m2_ICAM1"
+GFP_dif.m2_ICAM1[, V2:=NULL]
+GFP_dif.m2_ICAM1[, value:=NULL]
+
+setnames(GFP_dif.m2_ICAM1, "GFP_dif.m2_ICAM1", "value")
+all.data.norm <- rbind( all.data.norm, GFP_dif.m2_ICAM1 )
+
+# for mean3
+
+mean3above <- all.data.norm[ fingerprints %in% "mean3above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
+mean3bellow <- all.data.norm[ fingerprints %in% "mean3below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
+
+all(mean3above[, timeID] == mean3bellow[, timeID])
+GFP_dif.m3_ICAM1 <- cbind( mean3above, mean3bellow[, value])
+GFP_dif.m3_ICAM1[, GFP_dif.m3_ICAM1 := value - V2 ]
+summary(GFP_dif.m3_ICAM1$GFP_dif.m3_ICAM1)
+GFP_dif.m3_ICAM1$fingerprints <- "GFP_dif.m3_ICAM1"
+GFP_dif.m3_ICAM1[, V2:=NULL]
+GFP_dif.m3_ICAM1[, value:=NULL]
+
+setnames(GFP_dif.m3_ICAM1, "GFP_dif.m3_ICAM1", "value")
+all.data.norm <- rbind( all.data.norm, GFP_dif.m3_ICAM1 )
+source('normFunICAM1.R')
+
+ICAMnorm <- normFunIcam(dataIn = all.data.norm, normVar = "obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1")
+all.data.norm <- rbind(all.data.norm, ICAMnorm)
 
 
-# select DILI classes and remove bad dissolving compounds
-colnames(hm_data)
 
 
-ggplot(data = ML_data_final_data_sel, aes(x= treatment, y =GFP_pos.2m_Srxn1_maxValue_100cmax, color = DILIConcern )) + geom_point() + 
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
-                                       colour = "grey50") )
+hm_feats <- c("mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", "GFP_pos.m3sd_Srxn1", "GFP_pos.3m_Srxn1", "GFP_pos.2m_Srxn1", 
+              "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "GFP_pos.m3sd_DDIT3", "GFP_pos.3m_DDIT3", "GFP_pos.2m_DDIT3",
+              "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21", "GFP_pos.m3sd_p21", "GFP_pos.3m_p21", "GFP_pos.2m_p21",
+              "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1", "GFP_dif.m3_ICAM1", "GFP_dif.m2_ICAM1", "GFP_dif.m1_ICAM1" )
+
+hm_data <- all.data.norm[ fingerprints %in% hm_feats]
+unique(hm_data[, fingerprints])
 
 
+# change names to more suitable for publication. 
+
+
+
+
+hm_data[ fingerprints == "mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", fingerprints := "Int_Srxn1" ]
+hm_data[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", fingerprints := "Int_Chop" ]
+hm_data[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21", fingerprints := "Int_p21" ]
+hm_data[ fingerprints == "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1", fingerprints := "Int_Icam1" ]
+hm_data[ ,fingerprints := gsub("DDIT3", "Chop", fingerprints)]
+hm_data[ ,fingerprints := gsub("ICAM1", "Icam1", fingerprints)]
+unique(hm_data[, fingerprints])
+
+# calculate max of each time curve
+
+hm_data[ , .N, by = list(treatment, plateID, cmax, fingerprints, replID, dose_uM)]
+
+hm_data_max <- hm_data[ , max(value, na.rm=TRUE), by = list(treatment, plateID, cmax, fingerprints, replID, dose_uM)]
+
+hm_data_max <- hm_data_max[ , mean(V1), by = list(treatment, cmax, fingerprints)]
+setnames(hm_data_max, old = "V1", new = "value")
+
+
+annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_10012017.txt', sep = "\t", header = T )
+
+annotationData <- data.table(annotationData)
+setnames(annotationData, old = "cmax", new = "cmaxDose")
+hm_data_max[ treatment == "carbamazapine", treatment := "carbamazepine"]
+hm_data_max[ treatment == "etoposide ", treatment := "etoposide"]
+
+setkey(hm_data_max, 'treatment')  
+setkey(annotationData, 'treatment')
+hm_data_max <- annotationData[hm_data_max]
+
+save(file = '../tmp/hm_data_max_.Rdata', data = hm_data_max) # 11-1-2017 16.33
+
+summary(hm_data_max[, value])
+
+# create wide data format
+
+dmsoD <- hm_data_max[ cmax == "0cmax"]
+hm_data_max <- hm_data_max[ cmax != "0cmax"]
+dmsoD <- as.data.frame(dmsoD)
+dmsoD1 <- dmsoD
+dmsoD2 <- dmsoD
+dmsoD3 <- dmsoD
+dmsoD4 <- dmsoD
+dmsoD5 <- dmsoD
+
+dmsoD1$cmax <- "1cmax"
+dmsoD2$cmax <- "5cmax"
+dmsoD3$cmax <-  "10cmax"
+dmsoD4$cmax <- "50cmax"
+dmsoD5$cmax <- "100cmax"
+
+dmsoD <- rbind(dmsoD1, dmsoD2,dmsoD3,dmsoD4,dmsoD5)
+
+dmsoD <- as.data.table(dmsoD)
+
+hm_data_max <- rbind(hm_data_max, dmsoD)
+hm_data_max[ , fingerprints:= paste(fingerprints, cmax, sep = "_")]
+
+# need a fix for DMSO
+
+hm_data_max_w <- dcast(hm_data_max, treatment + EndDissolvedQuality + DILIConcern ~ fingerprints  , value.var = "value" )
+
+hm_data_max_w[1:5,1:5]
+
+hm_data_max_w[1:5,1:11]
+colnames(hm_data_max_w)
+hm_data_max_w$treatment
+
+
+hm_data_max_w <- as.data.table(hm_data_max_w)
+class(hm_data_max_w)
+
+table(hm_data_max_w[, DILIConcern])
+hm_data_max_w <- hm_data_max_w[ ! DILIConcern %in% c("N/A", "Ambiguous DILI-concern")]
+hm_data_max_w[ ,DILIConcern := factor(DILIConcern)]
+colnames(hm_data_max_w)[1:10]
+
+unique(hm_data_max_w[, EndDissolvedQuality ])
+hm_data_max_w <- hm_data_max_w[EndDissolvedQuality == "yes", ]
+
+hm_data_treatments <- hm_data_max_w$treatment
+hm_data_DILIConcern <- hm_data_max_w$DILIConcern
+
+hm_data_data <- as.matrix(hm_data_max_w[, -c(1:3)] )
+rownames(hm_data_data) <- hm_data_treatments
+
+
+# color annotations
 require(RColorBrewer)
-DILI_Type <- c(brewer.pal(9,"YlOrRd")[c(1,3,6)],"pink", "light blue")
-hist(1:100 , col=DILI_Type)
-names(DILI_Type) <- c("No-DILI-Concern","Less-DILI-Concern", "Most-DILI-Concern", "Mech-control", "Neg-control")
 
-myColors <- list(DILI_Type = DILI_Type ) 
+DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1,3,6)])
+hist(1:100 , col=DILIConcern)
+
+names(DILIConcern) <- c("No-DILI-Concern","Less-DILI-Concern", "Most-DILI-Concern")
+
+myColors <- list(DILIConcern = DILIConcern ) 
 
 myColors$cmax <- brewer.pal(5, "BuGn" )
-myColors$fingerprint = "black"
 names(myColors$cmax) <- c("cmax1", "cmax5","cmax10", "cmax50", "cmax100")
 
+myColors$reporter <- c("light blue", "light green", "#CC6633", "purple")
+names(myColors$reporter) <- c("Srxn1", "Chop", "p21", "Icam1")
+
+treatmentAnot<-data.frame(DILIConcern = hm_data_DILIConcern)
 
 
-colnames(gatherCompVecsDF) <- paste(fingerprintAnot, colnames(gatherCompVecsDF))
+# color anotations for columns. 
+# order columns, create triple color annotation: reporter, sensitivity, cmax
 
-treatmentAnot1<-data.frame(DILI_Type=treatmentAnot1)
-treatmentAnotCol <- list(data.frame(fingerprint = fingerprintAnot))
+old.colnames.order <- colnames(hm_data_data)
+write.table(old.colnames.order, file = "../tmp/old.colnames.order.txt", sep = "\t")
 
-#write.table(colnames(gatherCompVecsDF), file = "column names.txt", sep ="\t")
+new.colnames.order <- read.table(file = '../tmp/new.colnames.order.txt', sep ="\t")
+colIndex <- match(   new.colnames.order$V1, old.colnames.order)
 
-reordCols <- read.table(file= "E:/DILI screen/meta analyse DILI screen/metaanalaysis/reordered column names.txt", sep="\t")
-
-reordAnotCols <- c(
-  rep("Srxn1", 5), rep(c("Chop", "p21"), each = 4), rep("ICAM1", 3), "CellDeath"
-)
-
-reordAnotCols<- rep(reordAnotCols, each = 5)
-
-indCols <- match(reordCols$V1, colnames(gatherCompVecsDF))
+all(old.colnames.order[colIndex] == new.colnames.order)
 
 
 annCol <- list(cmax=
   rep(
-    c("cmax1","cmax5", "cmax10","cmax50", "cmax100"),  17
+    c("cmax1","cmax5", "cmax10","cmax50", "cmax100"),  16
     ),
-  fingerprint = reordAnotCols
+  reporter = rep(c("Srxn1", "Chop", "p21", "Icam1"), each = 20)
+  
   )
+dim(hm_data_data)
 
-lapply(annCol, length)
-lapply(myColors,length)  
-
-
-head(reordAnotCols)
-
-
-myColors$fingerprint <- c(rep(c("light blue", "light green", "#CC6633", "purple", "black"), each = 1))
-
-
-annCol$fingerprint <- factor(annCol$fingerprint, levels=
-                               c("Srxn1", "Chop", "p21", "ICAM1", "CellDeath"), ordered = FALSE)
 
 
 #colBreaks <-c(seq(-0.01, 0.3,length.out=15), seq(0.301,1.01, length.out = 14))
@@ -2687,11 +2889,6 @@ annCol$fingerprint <- factor(annCol$fingerprint, levels=
 colBreaks <-c(  -seq(1.01, 0.411, length.out = 8), -seq( 0.4, 0.01, length.out=16)  , 
                 c(seq(0.01, 0.4,length.out=16), seq(0.411,1.01, length.out = 8)) )
 
-29*1.5
-43.5/4
-length(colBreaks)
-length(my.colors)
-plot(colBreaks)
 
 my.colors <- c(rev(brewer.pal(9, "YlGnBu")) , brewer.pal(9, "YlOrRd"))
 
@@ -2699,14 +2896,26 @@ my.colors <- c(rev(brewer.pal(9, "YlGnBu")) , brewer.pal(9, "YlOrRd"))
 pie(rep(1, length(my.colors)), labels = sprintf("%d (%s)", seq_along(my.colors), 
                                                 my.colors), col = my.colors)
 
+?hclust
+?dist
+# cluster and reorder rows;
+dist_hm_data <- dist(hm_data_data, method = "manhattan")
+clust_hm_data<-hclust(dist_hm_data, method = "median")
+pdf("../generated/results/rowClusterDendogram_manh_median.pdf", width = 24, height = 8)
+plot(clust_hm_data)
+dev.off()
+
+hm_data_rowOrder <- clust_hm_data$labels[clust_hm_data$order]
+
+indOrder <- match( hm_data_rowOrder, rownames(hm_data_data))
 
 
 
-pdf("figures/sel_anot_max_of_time_heatmap_manh.complete.pdf", width= 12, height = 18)
-aheatmap(gatherCompVecsDF[indOrder, indCols], Rowv = NA, Colv=NA, 
+pdf("../generated/results/heatmap_manh_ward.pdf", width= 12, height = 18)
+aheatmap(hm_data_data[ indOrder ,colIndex], Rowv = NA, Colv=NA, 
          color = my.colors, breaks = colBreaks,
          fontsize = 10, width = 10, height=10, legend = TRUE,
-         annRow = treatmentAnot1 , annCol = annCol   ,annColors = myColors  #,txt =gatherCompVecsDF[indOrder, indCols]
+         annRow = treatmentAnot[indOrder, , drop = F] , annCol = annCol, annColors = myColors   #,txt =hm_data_data[ indOrder ,colIndex]
 )
 dev.off()
 
@@ -2714,6 +2923,37 @@ dev.off()
 ```
 
 
+extra figuur voor poster/ presentatie
+gebaseerd op hm_data_data
+```{r extra_fig}
+
+head(hm_data_data)
+treatmentAnot
+tempFigure <- as.data.frame(hm_data_data)
+tempFigure$treatment <- rownames(hm_data_data)
+tempFigure$DILIConcern <- treatmentAnot$DILIConcern
+head(treatmentAnot)
+head(tempFigure)
+?melt
+
+tempFigure_l <- melt(tempFigure, id.vars = c("treatment", "DILIConcern"))
+
+head(tempFigure_l)
+
+ind <- grepl("_100cmax", tempFigure_l$variable)
+ind2 <- grepl("_50cmax", tempFigure_l$variable)
+tempFigure_l <- tempFigure_l[ind | ind2, ]
+
+tempFigure_l$DILIConcern <- factor(tempFigure_l$DILIConcern, levels = c("Most-DILI-Concern", "Less-DILI-Concern", "No-DILI-Concern"))
+
+ggplot(tempFigure_l, aes( x = treatment, y = value, color = DILIConcern )) + geom_point(size = 4) + 
+    theme_minimal() +
+   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 5 , 
+                                    colour = "grey50") ) + facet_wrap(~variable, ncol=2)  +
+  scale_colour_manual(values = c("red", "orange", "green")) 
+
+head(tempFigure_l)
+```
 
 
 adv meeting bob/steven;
