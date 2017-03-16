@@ -154,9 +154,11 @@ ICAM.raw[[4]]$myDT$plateID[1]
 
 dim(ICAM.raw[[4]]$myDT)
 ICAM.raw[[4]]$myDT[, timeAfterExposure := as.numeric(as.character(timeAfterExposure))]
+
 ICAM.raw[[4]]$myDT <- ICAM.raw[[4]]$myDT[ !( plateID %in% "20150608 - 10cMax_wells" &
                             timeAfterExposure %in% as.numeric( c(25.8, 27.2, 28.6, 30.0, 31.4, 32.8, 34.2, 35.6, 37.0, 38.4))) ,]
 
+unique(ICAM.raw[[4]]$myDT$timeAfterExposure)
 # De plaat met SRXN1 en ICAM1 van 0930 op 1001 is gecrashed na 5 uur en 45 minuten. 
 # Het eerste experiment (dus alles in map 0930)  was 's middags gestart om 16:55
 # Het experiment is herstart om 9:02
@@ -533,6 +535,7 @@ unique(mean.data.ICAM1.long[ cmax != "0" , list(plateID, cmax)])
 
 save(file = '../tmp/mean.data.ICAM1.long.Rdata', mean.data.ICAM1.long)
 
+
 ```
 
 plots for quality control   
@@ -585,8 +588,11 @@ for (i in seq_along(dir.files)){
 Data cleaning - new cmax
 
 ```{r newcmax_data_cleaning}
+20150930_SRXN1
 
-lapply(raw.data, function(x) unique(x$plateID))
+20151001_SRXN1
+
+lapply(raw.data, function(x) unique(x$timeID))
 # 37 through 43 are newcmax plates containing multiple doses
 for(i in 37:43){
   raw.data[[i]][ , plateID := paste(plateID, "newCmax", sep = "_")]
@@ -599,9 +605,10 @@ for(i in 37:43){
 # Het tweede deel (dus alles in map 1001) duurt nog 7 uur. Tijdpunten zijn elke 1 uur en 35 minuten. 
 
 # dus 5:45 --> gecrasht om 16:55 + 5u45 min = 22:40 gecrasht. Start 10:20 later
+lapply(raw.data, function(x) length(unique(x$timeID)))
 
-unique((raw.data[[42]][, timeID])) 
-unique((raw.data[[43]][, timeID])) 
+unique((raw.data[[42]][, plateID])) 
+unique((raw.data[[43]][, plateID])) 
 #change plateID
 
 raw.data[[43]][, plateID:="20150930_SRXN1_newCmax"]
@@ -626,6 +633,10 @@ raw.data[[43]][, timeAfterExposure:=round(as.numeric(timeID)*timeBetweenFrames+e
 unique((raw.data[[43]][, timeAfterExposure])) 
 unique((raw.data[[43]][, timeID])) 
 raw.data[[43]][, timeID:=as.numeric(timeID)+4]
+unique((raw.data[[42]][, timeAfterExposure])) 
+unique((raw.data[[42]][, timeID])) 
+
+
 
 #combine:
 object.size(raw.data[[42]]) #199880 bytes
@@ -638,14 +649,51 @@ object.size(raw.data[[42]])  #423888 bytes
 nrow(raw.data[[42]])  #7448
 #199880+214776 = 414656
 raw.data[[43]] <- NULL
+unique(raw.data[[42]][, timeID])
 unique(raw.data[[42]][, timeAfterExposure])
-
 raw.data[[42]][ treatment%in%"DMSO" & as.numeric(as.character(dose_uM)) <= 0.2] # checking if controls available..
+unique(raw.data[[42]]$variable)
+unique(raw.data[[42]][ treatment == "Zimelidine", dose_uM])
 
+unique(raw.data[[42]][ , variable])
+# multiple background values for the combined crashed plate. Gsub them to 3 unique values, and problem with 4 timepoint data later on should be solved.
+raw.data[[42]][ , variable := gsub("count_Cytoplasm_Intensity_IntegratedIntensity_image_GFP_larger_9.582",
+                                   "count_Cytoplasm_Intensity_IntegratedIntensity_image_GFP_larger_8.074", variable)]
+
+raw.data[[42]][ , variable := gsub("count_Cytoplasm_Intensity_IntegratedIntensity_image_GFP_larger_14.373",
+                                   "count_Cytoplasm_Intensity_IntegratedIntensity_image_GFP_larger_12.111", variable)]
+raw.data[[42]][ , variable := gsub("count_Cytoplasm_Intensity_IntegratedIntensity_image_GFP_larger_38.816",
+                                   "count_Cytoplasm_Intensity_IntegratedIntensity_image_GFP_larger_34.524", variable)]
+
+
+
+
+```
+
+# testing if length 4 time is fixed
+```{r }
+
+
+lapply(raw.data, colnames)
+raw.data[[42]]$singlelCurveName = paste(raw.data[[42]]$variable, raw.data[[42]]$cell_line, raw.data[[42]]$treatment, raw.data[[42]]$cmax, raw.data[[42]]$replID, sep = "__")  
+
+test <- split(raw.data[[42]], raw.data[[42]]$singlelCurveName)
+
+sort(unique(paste0(raw.data[[42]]$treatment, raw.data[[42]]$dose_uM)))
+
+
+ind<- lapply(test, function(x) { length(unique(x$timeAfterExposure)) }  )
+
+unique(ind)
+
+indd <- lapply(ind, function(x) x == 4)
+
+raw.data[[42]]$singlelCurveName <- NULL
 ```
 
 
 data cleaning - original cmax data
+
 
 
 ```{r data_cleaning}
@@ -704,6 +752,7 @@ unique(raw.data$plateID)
 
 raw.data$replID <- "none"
 raw.data$cmax <- "none"
+unique(raw.data$plateID)
 
 raw.data[ raw.data$plateID == "2013_07_10_Srxn1_z1", "replID"] <-   "replicate_1"  #Srxn1 100cmax
 raw.data[ raw.data$plateID == "2013_07_10_Srxn1_z1", "cmax"] <-   "100cmax"  #Srxn1 100cmax
@@ -816,6 +865,9 @@ raw.data[ raw.data$plateID == "2014_02_25_p21", "cmax"] <-        "1cmax" #p21 1
 raw.data[ raw.data$plateID == "2014_03_05_p21", "replID"] <-        "replicate_2" #p21 1cmax
 raw.data[ raw.data$plateID == "2014_03_05_p21", "cmax"] <-        "1cmax" #p21 1cmax
 
+
+
+unique(raw.data[ replID == "none", plateID ])
 sum((raw.data$replID == "none")) #0
 sum((raw.data$cmax == "none")) #0
 unique(raw.data$cmax)
@@ -831,8 +883,10 @@ raw.data <- raw.data[ cmax != "none", ]
 raw.data[treatment == "metformin ", treatment := "metformin"]
 
 # remove newcmaxcompounds from raw.data
+unique(newcmax.data[newcmax.data$plateID == "20150930_SRXN1_newCmax", c( "plateID", "replID", "timeID") ])
+ unique(raw.data[(treatment %in% newcmaxcomps), ]$plateID)
 
-raw.data <- raw.data[!(treatment %in% newcmaxcomps), ]
+ raw.data <- raw.data[!(treatment %in% newcmaxcomps), ]
 
 #Carmustine 0.037 ipv 0.356
 
@@ -857,6 +911,9 @@ setkeyv(newcmax.data, c("treatment", "dose_uM"))
 
 newcmax.data.cmax <- newCmax[newcmax.data]
 
+min(newcmax.data.cmax[ , length(unique(timeID)), by = list(treatment, variable, plateID, replID)]$V1)
+
+
 # add cmax for dmso
 newcmax.data.cmax[ treatment == "dmso", cmax := 0 ]
 unique(newcmax.data.cmax[ is.na(cmax), treatment])
@@ -875,7 +932,7 @@ newcmax.data.cmax[ plateID == "20150930_SRXN1_newCmax", replID := 'replicate_2' 
 
 raw.data <- rbind(raw.data, newcmax.data.cmax)
 raw.data <- raw.data[ cmax != 25,]
-
+unique(raw.data[, cmax])
 
 raw.data[ cmax == 0, cmax := '0cmax']
 raw.data[ cmax == 1, cmax := '1cmax']
@@ -894,12 +951,17 @@ raw.data$treatment <- gsub("metformin ", "metformin", raw.data$treatment )
 # there are multiple & varying number of replicates, because manual inspection had shown failed experiments due to microscope crashes/ CO2 failure etc. after which experiments were repeated.
 # there are however, at least two replicates for all experiments (cell line dose combinations)
 
+
+
+
+
+
+
 ```
 
 Make sure concentrations are exactly the same  
 
 ```{r fix_dose }
-
 
 raw.data$comp_dose <- paste(raw.data$treatment, raw.data$dose_uM, sep="_")
 raw.data[, dose_uM := as.numeric(dose_uM)]
@@ -1001,6 +1063,8 @@ for(i in seq_along(newcmaxcomps)){
  print(newcmaxcomps[i])
    print(unique(raw.data[ treatment == newcmaxcomps[i] & plateID == "p21_50Cmax", dose_uM]))
  }
+ unique(raw.data[ plateID == "p21_50Cmax", dose_uM ])
+ 
  
   raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM := 275]
   unique(raw.data[ treatment == "aspirin" & plateID == "p21_50Cmax", dose_uM ])
@@ -1071,6 +1135,8 @@ Change & select variable names
 
 ```{r transform_variable_names}
 
+
+
 unique(raw.data$variable)
 
 raw.data[, variable:= gsub("_obj_cyto_only_", "_Cytoplasm_", variable) ]
@@ -1086,6 +1152,8 @@ raw.data[, variable:= gsub("obj_cyto_only_Intensity_IntegratedIntensity", "Cytop
 raw.data[ , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.5.1",
                             "count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.51", variable)]
 
+
+unique(raw.data$variable)
 
 
 raw.data[, ThreshN:= str_match(variable,"_larger_([0-9 .]{2,6})$")[,2]]
@@ -1161,7 +1229,7 @@ raw.data[, variable := gsub("_image_hoechst",
                             "_Image_Hoechst", variable)]
 
 # remove irrelevant variables;
-
+min(raw.data[ , length(unique(timeAfterExposure)), by = list(treatment, variable, plateID, replID, cmax)]$V1)
 
 raw.data <- raw.data[ !variable %in% c( "min_maxNorm_CellNumber", "min_maxNorm_CellSpeed", "min_maxNorm_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP", "min_maxNorm_Nuclei_Intensity_IntegratedIntensity_Image_GFP")]
 
@@ -1174,13 +1242,13 @@ raw.data[, isMiddle:=NULL]
 
 
 
+
 ```
 
 
 plots for quality control (non icam1)  
 
 ```{r plotQQ_srxn1_chop_p21}
-
 
 raw.data[ treatment == "dmso", cmax := "0cmax" ]
 raw.data[, cmax := factor(cmax, levels = c("0cmax", "1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
@@ -1189,21 +1257,21 @@ raw.data[, cmax := factor(cmax, levels = c("0cmax", "1cmax", "5cmax", "10cmax", 
 # plot time curves, grid the concentrations and treatments, loop over variables
 raw.data[, variable_CL := paste0(variable, cell_line)]
 fingerprintVarsC <- unique(raw.data[ , variable_CL])
-writepdfs <- "../generated/results/nonicam_qqplots/"
-if(!dir.exists(writepdfs)){
-  dir.create(writepdfs)
-}
-
-for( i in seq_along(fingerprintVarsC)){
-
-  plotData <- raw.data[ variable_CL %in% fingerprintVarsC[i]]
-  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
-  p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
-    theme_sharp() + ggtitle( label = fingerprintVarsC[i])
-  pdf(file = paste(writepdfs, fingerprintVarsC[i], ".pdf", sep =""), width =12, height = 100)
-  print(p)
-  dev.off()
-}
+# writepdfs <- "../generated/results/nonicam_qqplots/"
+# if(!dir.exists(writepdfs)){
+#   dir.create(writepdfs)
+# }
+# 
+# for( i in seq_along(fingerprintVarsC)){
+# 
+#   plotData <- raw.data[ variable_CL %in% fingerprintVarsC[i]]
+#   p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
+#   p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
+#     theme_sharp() + ggtitle( label = fingerprintVarsC[i])
+#   pdf(file = paste(writepdfs, fingerprintVarsC[i], ".pdf", sep =""), width =12, height = 100)
+#   print(p)
+#   dev.off()
+# }
 
 
 
@@ -1222,7 +1290,7 @@ unique(raw.data[ order(cell_line, cmax,plateID, replID), list(cell_line, cmax,pl
 # 3 50cmax DDIT3 replicates
 rm.plates <- c( "2013_07_10_Srxn1_z1", "2013_07_24_Srxn1", "2013_07_29_Srxn1")
 
-raw.data <- raw.data[ !plateID %in% rm.plates, ]
+raw.data <- raw.data[ !(plateID %in% rm.plates), ]
 
 raw.data[ cell_line == "Srxn1" & (cmax == "100cmax" | cmax == "0cmax") & plateID == "2013_08_01_Srxn1", replID := "replicate_1"]
 raw.data[ cell_line == "Srxn1" & (cmax == "100cmax"| cmax == "0cmax") & plateID == "2013_08_14_Srxn1", replID := "replicate_2"]
@@ -1247,10 +1315,14 @@ raw.data <- raw.data[ !(cell_line == "p21" & cmax == "50cmax" & variable == "Nuc
  raw.data[variable %in% "Nuclei_Intensity_IntegratedIntensity_Image_GFP", fingerprints:= paste(variable, cell_line, sep = "_")]
  raw.data[variable %in% "Nuclei_Intensity_MeanIntensity_Image_GFP", fingerprints:= paste(variable, cell_line, sep = "_")]
 
- unique(raw.data[,fingerprints])
+ min(raw.data[ , length(unique(timeID)), by = list(treatment, fingerprints, plateID, replID, cmax)]$V1)
+ 
+  unique(raw.data[,fingerprints])
 
  countFeats <- unique(raw.data[ order(cell_line, cmax,plateID, replID, fingerprints), list(cell_line, cmax, fingerprints, replID)])
 countFeats[,list(cell_line, cmax, fingerprints)][ ,.N , by = list(cell_line, cmax, fingerprints)][ N<2]
+
+
 
 ```
 
@@ -1259,6 +1331,8 @@ Combine ICAM1 and Srxn1-DDIT3-p21
 ```{r combine_sets}
 
 load('../tmp/mean.data.ICAM1.long.Rdata')
+
+
 
 raw.data[, variable_CL:=NULL]
 
@@ -1306,6 +1380,10 @@ mean.data.ICAM1.long[cmax == 100, cmax := "100cmax"]
 mean.data.ICAM1.long[, cmax:=factor(cmax)]
 
 all.data <- rbind(raw.data, mean.data.ICAM1.long)
+
+
+
+
 
 ```
 
@@ -1595,7 +1673,7 @@ load( file = "../tmp/PI.data_mean.Rdata")
 Normalization of reporter responses by min-max normalization; $$ y = \frac{ x - x_{min} }{x_{max} - x_{min}} $$ , with `x_min` and `x_max` replicate-based. 
 This plate normalization is valid if the underlying assumption holds that positive and negative controls exist on each plate and behave similarly on a biological level accros plates.
 
-
+##laad sessie hier 13022017
 ```{r }
 
 # min-max normalize intensity based data
@@ -1746,6 +1824,8 @@ ML_data_QC[ cmax == "100", cmax := "100cmax"]
 
 ML_data_QC[ , cmax := factor(cmax, levels = c("0cmax","1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
 
+write.table( ML_data, file = "../generated/summarydataDILI_screen.txt", sep ="\t", col.names = NA)
+write.table(ML_data_QC, file = "../generated/QC_DILI_screen.txt", sep = "\t", col.names = NA)
 
 
 MLfingerprints <- unique(ML_data[, fingerprints])
@@ -1753,44 +1833,41 @@ ML_QC_fingerprints <- unique(ML_data_QC[, fingerprints])
 
 # plot data, to check normalization + for ML selected QC
 
-writepdfs <- "../generated/results/ML_data_time/"
-if(!dir.exists(writepdfs)){
-  dir.create(writepdfs)
-}
-
-for( i in seq_along(MLfingerprints)){
-
-  plotData <- ML_data[ fingerprints %in% MLfingerprints[i]]
-  
-  p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
-  p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
-    theme_sharp() + ggtitle( label = MLfingerprints[i]) 
-  pdf(file = paste(writepdfs, MLfingerprints[i], ".pdf", sep =""), width =12, height = 100)
-  print(p)
-  dev.off()
-
-  }
-
-writepdfs <- "../generated/results/ML_data_QC/"
-if(!dir.exists(writepdfs)){
-  dir.create(writepdfs)
-}
-
-for( i in seq_along(ML_QC_fingerprints)){
-
-  plotData <- ML_data_QC[ fingerprints %in% ML_QC_fingerprints[i]]
-  
-  p <- ggplot(data =plotData, aes(x= cmax, y=value )) + facet_wrap(~treatment)
-  p<-p + geom_point() + geom_line(aes(group=treatment)) + 
-    theme_sharp() + ggtitle( label = ML_QC_fingerprints[i]) 
-  pdf(file = paste(writepdfs, ML_QC_fingerprints[i], ".pdf", sep =""), width =30, height = 30)
-  print(p)
-  dev.off()
-
-  }
-
-
-
+# writepdfs <- "../generated/results/ML_data_time/"
+# if(!dir.exists(writepdfs)){
+#   dir.create(writepdfs)
+# }
+# 
+# for( i in seq_along(MLfingerprints)){
+# 
+#   plotData <- ML_data[ fingerprints %in% MLfingerprints[i]]
+#   
+#   p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value, color = replID)) + facet_grid(treatment~cmax)
+#   p<-p + geom_point(aes(color=replID, shape = replID)) + geom_line(aes(group=replID, color=replID)) + 
+#     theme_sharp() + ggtitle( label = MLfingerprints[i]) 
+#   pdf(file = paste(writepdfs, MLfingerprints[i], ".pdf", sep =""), width =12, height = 100)
+#   print(p)
+#   dev.off()
+# 
+#   }
+# 
+# writepdfs <- "../generated/results/ML_data_QC/"
+# if(!dir.exists(writepdfs)){
+#   dir.create(writepdfs)
+# }
+# 
+# for( i in seq_along(ML_QC_fingerprints)){
+# 
+#   plotData <- ML_data_QC[ fingerprints %in% ML_QC_fingerprints[i]]
+#   
+#   p <- ggplot(data =plotData, aes(x= cmax, y=value )) + facet_wrap(~treatment)
+#   p<-p + geom_point() + geom_line(aes(group=treatment)) + 
+#     theme_sharp() + ggtitle( label = ML_QC_fingerprints[i]) 
+#   pdf(file = paste(writepdfs, ML_QC_fingerprints[i], ".pdf", sep =""), width =30, height = 30)
+#   print(p)
+#   dev.off()
+# 
+#   }
 
 ```
 
@@ -1916,6 +1993,7 @@ timedynamics_feats$rep_names <- rep_names
 head(timedynamics_feats)
 dim(timedynamics_feats)
 save(timedynamics_feats, file = '../tmp/timedynamics_feats.Rdata')
+save( ML_data, file =  '../tmp/ML_data.Rdata')
 load('../tmp/timedynamics_feats.Rdata')
 ```
 
@@ -1927,8 +2005,6 @@ Note the use of cmax ( as numerical values ) and not dose, as dose is wildly dif
 
 
 ```{r plot_dose_response_timedynamics}
-
-
 
 
 writepdfs <- "../generated/results/ML_data_dose_time_dynamics/"
@@ -2067,7 +2143,7 @@ ML_data_final[treatment_names == "carbamazepine", 1:4]
 ML_data_final[treatment_names == "etoposide ", treatment_names := 'etoposide' ]
 
 # annotate data
-annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_10012017.txt', sep = "\t", header = T )
+annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
 
 annotationData <- data.table(annotationData)
 annotationData[ , X:=NULL]
@@ -2078,8 +2154,9 @@ annotationData[, X.1:=NULL]
 
 setkey(ML_data_final, 'treatment_names')  
 setkey(annotationData, 'treatment')
+
 ML_data_final <- annotationData[ML_data_final]
-ML_data_final[1:5,1:5]
+ML_data_final[1:5,1:11]
 save(ML_data_final, file = "../tmp/ML_data_final.Rdata")
 
 #TODO include solvability & daily dosage data
@@ -2087,6 +2164,230 @@ save(ML_data_final, file = "../tmp/ML_data_final.Rdata")
 #as.data.frame(unique(all.data.norm[cmax == "1cmax" & treatment == "tacrolimus", list(treatment,cmax, dose_uM)]))
 
 ```
+
+
+
+Fit time curves for time course plots
+
+
+```{r fit_time}
+load('../tmp/ML_data.Rdata')
+
+annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
+
+annotationData <- data.table(annotationData)
+
+setnames(annotationData, old = "cmax", new = "onecmax")
+setkey(ML_data, 'treatment')  
+setkey(annotationData, 'treatment')
+
+sort(unique(ML_data[, treatment]))
+
+ML_data <- annotationData[ML_data]
+# select data with fda label and correct dissolve
+unique(ML_data[ ,Bob_anot ])
+
+ML_data <- ML_data[ DILIConcern %in% c("Most-DILI-Concern", "Less-DILI-Concern", "No-DILI-Concern"),  ]
+ML_data <- ML_data[ EndDissolvedQuality == "yes",  ]
+ML_data <- ML_data[ Bob_anot != "general_cytotox_reactive",  ]
+
+# select features for plotting
+
+ML_data <- ML_data[ fingerprints %in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"), ]
+
+ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, sep = "__")]
+
+
+ML_data
+
+GFP_data.list <- split(ML_data, ML_data$singleCurveName)
+length(GFP_data.list)
+
+ind<- lapply(GFP_data.list, function(x) { length(unique(x$timeAfterExposure)) }  )
+Srxn1 0.11514813              16.1 replicate_2 50cmax GFP_pos.2m_Srxn1 GFP_pos.2m_Srxn1__zimelidine__50cmax__replicate_2
+head(ind)
+sort(unique(unlist(ind)))
+
+indd <- lapply(ind, function(x) x == 4)
+inddd<- unlist(indd)
+length(inddd)
+length(GFP_data.list)
+sum(inddd)
+
+
+
+GFP_data.list.lowTP <- GFP_data.list[inddd]
+length(GFP_data.list.lowTP)
+ind3 <- lapply(GFP_data.list.lowTP, "[[", 'treatment')
+
+ind3 <- (sapply(ind3, unique)) == "zimelidine"
+GFP_data.list.lowTP[ind3]
+
+GFP_data.list <- GFP_data.list[!inddd]
+length(GFP_data.list.lowTP) 
+length(GFP_data.list) 
+
+
+model.results.GFP_data_lowTP = list()
+
+#include the fitted parameters to perform a F-test
+# perform t-test for fitted/sampled values after model fit
+
+pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO.pdf", height = 6, width = 6)
+
+
+
+for( i in seq_along(GFP_data.list.lowTP) ){ #)
+
+  # acarbose 0.1502 replicate_1 GFP_pos.m3sd_DDIT3
+  fm1 <- lm(value ~ ns(timeAfterExposure, df =4), data = GFP_data.list.lowTP[[i]])
+  model.results.GFP_data_lowTP[[i]] <-  predict(fm1, dtTime<-data.frame(
+    timeAfterExposure = round(seq(0.6,23, length.out=24), digits=2)))
+  model.results.GFP_data_lowTP[[i]] <- as.data.frame(model.results.GFP_data_lowTP[[i]] )
+  colnames(model.results.GFP_data_lowTP[[i]])<- "mod"
+  
+  model.results.GFP_data_lowTP[[i]]$treatment <- unique(GFP_data.list.lowTP[[i]]$treatment)
+  model.results.GFP_data_lowTP[[i]]$dose_uM <- unique(GFP_data.list.lowTP[[i]]$dose_uM)
+  model.results.GFP_data_lowTP[[i]]$cmax <- unique(GFP_data.list.lowTP[[i]]$cmax)
+  model.results.GFP_data_lowTP[[i]]$replID <- unique(GFP_data.list.lowTP[[i]]$replID)
+  model.results.GFP_data_lowTP[[i]]$timeAfterExposure <- dtTime$timeAfterExposure
+  model.results.GFP_data_lowTP[[i]]$fingerprints <- unique(GFP_data.list.lowTP[[i]]$fingerprints)
+  
+   p <- ggplot(data =  model.results.GFP_data_lowTP[[i]], aes(x=timeAfterExposure, y = mod)) + geom_point() + 
+      geom_point(data= GFP_data.list.lowTP[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
+   ggtitle(unique(GFP_data.list.lowTP[[i]]$splitL)) + ylim(c(-1.2,1.2))
+  
+  print(p)
+}
+dev.off()
+
+
+model.results.GFP_data = list()
+
+pdf(file = "../generate/results/model fit graphs with DMSO.pdf", height = 6, width = 8)
+#nog een keer runnen (zonder pdf) - om fit p-waarden te extraheren
+for( i in seq_along(GFP_data.list)){ #
+  
+  # acarbose 0.1502 replicate_1 GFP_pos.m3sd_DDIT3
+  fm1 <- lm(value ~ ns(timeAfterExposure, df =8), data = GFP_data.list[[i]])
+  model.results.GFP_data[[i]] <-  predict(fm1, dtTime<-data.frame(
+    timeAfterExposure = round(seq(0.6,23, length.out=24), digits=2)))
+  model.results.GFP_data[[i]] <- as.data.frame(model.results.GFP_data[[i]] )
+  colnames(model.results.GFP_data[[i]])<- "mod"
+  
+  
+  model.results.GFP_data[[i]]$treatment <- unique(GFP_data.list[[i]]$treatment)
+  model.results.GFP_data[[i]]$dose_uM <- unique(GFP_data.list[[i]]$dose_uM)
+  model.results.GFP_data[[i]]$cmax <- unique(GFP_data.list[[i]]$cmax)
+  model.results.GFP_data[[i]]$replID <- unique(GFP_data.list[[i]]$replID)
+  model.results.GFP_data[[i]]$timeAfterExposure <- dtTime$timeAfterExposure
+  model.results.GFP_data[[i]]$fingerprints <- unique(GFP_data.list[[i]]$fingerprints)
+  
+  p <- ggplot(data =  model.results.GFP_data[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() + 
+    geom_point(data= GFP_data.list[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
+    ggtitle(unique(GFP_data.list[[i]]$splitL)) + ylim(c(-1.2,1.2))
+  
+  print(p)
+  
+  
+  if((i%%1000)==0){
+   write.table(file = paste(graphDir, "progres", i ,".txt", sep =""), i/28521 )
+  }
+  
+}
+dev.off()
+
+
+# dont forgot to combine low TP with high TP
+
+save.image("../tmp/20170207aftermodelrun.Rdata")
+head(model.results.GFP_data[[3]])
+model.results.GFP_data.df <- do.call("rbind", model.results.GFP_data)
+
+model.results.GFP_data_lowTP.df <- do.call("rbind", model.results.GFP_data_lowTP)
+
+model.results.GFP_data.df <- rbind(model.results.GFP_data.df, model.results.GFP_data_lowTP.df)
+
+model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
+
+
+```
+
+
+
+
+
+
+Create the time course figure
+
+```{r, time_plots }
+
+
+
+
+
+
+```
+
+
+
+Create the dose response figure
+
+```{r, dose_figure}
+dosePlot <- all.data.withDose[ fingerprints%in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1")]
+dosePlot[, fingerprints := factor(fingerprints, levels = c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"))]
+all.treats <- unique(dosePlot$treatment)
+length(all.treats)/ 4
+3*35 + 1* 36 # 141
+
+105+36
+all.treats[1:35]
+all.treats[36:70]
+all.treats[71:105]
+all.treats[106:141]
+
+dir()
+#save.image("freeze2504_2016.RData")
+
+getwd()
+#setwd("E:/DILI screen/meta analyse DILI screen/")
+
+dir()
+getwd()
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+rcols <- gg_color_hue(4)
+
+pdf("figures/dose plots/dose response DILI 1 of 4_line.pdf", height=55, width=30)
+p<- ggplot(data=dosePlot[treatment%in% all.treats[1:35]] , aes(x = cmax, y = value)) +
+  geom_point(aes(color= fingerprints),size = 2) + facet_grid( treatment~fingerprints,  scales = "free_x" ) +
+  
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
+                                    colour = "grey50") ) + theme( strip.text.x = element_text( )) +
+  
+  theme(plot.title = element_text(lineheight=.8, size = 14 )) + theme(legend.text=element_text(size=12))
+
+#p+geom_smooth(aes(group=treatment, color = fingerprints, size =6), method = "loess")
+p = p + geom_line(aes(group=treatment, color = fingerprints, size =6)) #+ theme(legend.position = "bottom"))
+p <- p + coord_cartesian( ylim =c(-1.1,1.1))  + theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + geom_hline(yintercept=0, alpha = 0.5, linetype = 2) + 
+  scale_colour_manual(values =rcols[c(3,2,1,4)])
+print(p)
+dev.off()
+
+
+
+```
+
+
+
 
 ## Statistical learning; supervised classification  
 
@@ -2516,8 +2817,6 @@ plot( ML_data_final_data_sel[, GFP_pos.2m_Srxn1_maxValue_100cmax], col = ML_data
 
 
 table(data.frame(predict = as.character(predict(svmFit, newdata = ML_data_final_data_sel[-trainInd,] )), data = as.character(ML_data_final_data_sel$DILIConcern[-trainInd])))
-
-
 
 
 
@@ -2970,3 +3269,7 @@ check of daily dose/ logP voldoende aanwezig is op deze set
 
 
 ```
+
+
+
+
