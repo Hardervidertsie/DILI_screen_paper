@@ -373,6 +373,7 @@ gc()
 save( mean.data.ICAM1, file = "../tmp/mean.data.ICAM1.Rdata") # save to revert in case of error
 
 
+
 ```
 
 Clean ICAM1 summary data  
@@ -588,9 +589,9 @@ for (i in seq_along(dir.files)){
 Data cleaning - new cmax
 
 ```{r newcmax_data_cleaning}
-20150930_SRXN1
+#20150930_SRXN1
 
-20151001_SRXN1
+#20151001_SRXN1
 
 lapply(raw.data, function(x) unique(x$timeID))
 # 37 through 43 are newcmax plates containing multiple doses
@@ -950,11 +951,6 @@ raw.data$treatment <- gsub("metformin ", "metformin", raw.data$treatment )
 
 # there are multiple & varying number of replicates, because manual inspection had shown failed experiments due to microscope crashes/ CO2 failure etc. after which experiments were repeated.
 # there are however, at least two replicates for all experiments (cell line dose combinations)
-
-
-
-
-
 
 
 ```
@@ -1464,6 +1460,10 @@ sort(unique(all.data[, fingerprints]))
 PI.data <- as.data.table(
   read.delim(file = '../data/summary data files cell death/cytotox Summary Data.txt', sep = '\t', header=TRUE)
 )
+
+PI.data[PI.data$treatment == "digoxin",]
+
+unique(PI.data$variable)
 unique(PI.data[ , variable])
 PI.data <- PI.data[variable == "count_PI_obj_masked_primaryID_AreaShape_Area.DIV.Nuclei_obj_AreaShape_Area_larger_0.02_",]
 PI.data[, variable := "necrosis_pos"]
@@ -1543,7 +1543,8 @@ PI.data <- lookupcmax[PI.data]
 
 
 PI.data[ treatment == "aflatoxin b1" & is.na(cmax), cmax := "100cmax" ]
-PI.data[ treatment == "digoxin" , cmax := "100cmax"]
+
+PI.data[ treatment == "digoxin" & dose_uM == 0.283,cmax := "100cmax" ]
 
 PI.data[ treatment == "doxorubicin" & dose_uM == 1.18, cmax := "1cmax"]
 PI.data[ treatment == "doxorubicin" & dose_uM == 5.92, cmax := "5cmax" ]
@@ -1662,6 +1663,7 @@ save( file = "../tmp/PI.data_mean.Rdata", PI.data_mean)
 
 # combine this data and create a QC - figure (TODO)
 
+PI.data_mean[PI.data_mean$treatment == "digoxin",]
 
 load( file = "../tmp/model.results.t.mean.Rdata")
 load( file = "../tmp/plateQC_data_mean.Rdata")
@@ -1673,13 +1675,15 @@ load( file = "../tmp/PI.data_mean.Rdata")
 Normalization of reporter responses by min-max normalization; $$ y = \frac{ x - x_{min} }{x_{max} - x_{min}} $$ , with `x_min` and `x_max` replicate-based. 
 This plate normalization is valid if the underlying assumption holds that positive and negative controls exist on each plate and behave similarly on a biological level accros plates.
 
-##laad sessie hier 13022017
+##laad sessie hier 16042017
 ```{r }
+#save.image('../tmp/session_16032017.RData')
 
+#load('../tmp/session_16032017.RData')
 # min-max normalize intensity based data
 all.data
 
-unique(raw.data[ , fingerprints])
+unique(all.data[ , fingerprints])
 varsToNorm <- c("Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "Nuclei_Intensity_MeanIntensity_Image_Hoechst",
                  "Nuclei_Intensity_MeanIntensity_Image_GFP_p21",
                  "Cytoplasm_Intensity_MeanIntensity_Image_GFP_Srxn1", "Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1"
@@ -1750,7 +1754,7 @@ mmn.list = list()
  
  all.data.norm <- rbind(all.data, mmn.df)
 all.data.norm <- as.data.table(all.data.norm)
- 
+
 
 save( file = '../tmp/all.data.norm.Rdata', all.data.norm)
 
@@ -1906,12 +1910,12 @@ ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plate
 ML_data[ ,.N , by = list(singleCurveName) ][N>40]
 
 all.singleCurveNames <- unique(ML_data[ , singleCurveName])
-
+save.image('../tmp/ML_data.Rdata')
 allml <- na.omit(ML_data)
 allml <- split( allml, allml$singleCurveName)
 
 
-pdf( "../generated/results/ML_time_fits_.pdf", width = 6, height = 6)
+#pdf( "../generated/results/ML_time_fits_.pdf", width = 6, height = 6)
 
 output <- lapply( allml, function(x) celloscillate(Frame = x$timeAfterExposure, value = x$value,  keepFrameTime = TRUE,
               locationID = x$singleCurveName, timeInterval = NULL,aboveRegr = 5, suppresMaxFrames = 5,
@@ -1919,7 +1923,7 @@ output <- lapply( allml, function(x) celloscillate(Frame = x$timeAfterExposure, 
                slopeDomain = c("00:00:00", "08:00:00"), slopeDomain2 = c("08:00:00", "24:00:00"), timeToTH = c(0.2, 'absoluut'), maxValueTime = TRUE,
               nbasis = 13, lambda = 1, THpeaks = 0.1, f = 0.4,
                signal1 = NULL, signal2 = NULL, signal1TH = NULL, xCoord = NULL, yCoord = NULL, pix.x = NULL, pix.y=NULL, ylim = c(-1,1)) )
-dev.off()
+#dev.off()
 
 
 head(names(output))
@@ -1990,6 +1994,7 @@ timedynamics_feats$treatment_names <- treatment_names
 timedynamics_feats$cmax_names <- cmax_names
 timedynamics_feats$rep_names <- rep_names
 
+
 head(timedynamics_feats)
 dim(timedynamics_feats)
 save(timedynamics_feats, file = '../tmp/timedynamics_feats.Rdata')
@@ -2020,19 +2025,19 @@ timedynamics_feats_long <- melt(timedynamics_feats, id.vars = c('feature_names',
 timedynamics_feats_long[ , fingerprints := paste(feature_names, variable, sep = '_')]
 ML_td_fingerprints <- unique(timedynamics_feats_long[, fingerprints])
 
-for( i in seq_along(ML_td_fingerprints)){
-
-  plotData <- timedynamics_feats_long[ fingerprints %in% ML_td_fingerprints[i], ]
-  plotData[ , cmax := factor(cmax_names, levels = c('0cmax', '1cmax', '5cmax', '10cmax', '50cmax', '100cmax'))]
-  
-  p <- ggplot(data =plotData, aes(x= cmax, y=value, color = rep_names )) + facet_wrap(~treatment_names)
-  p<-p + geom_point() + geom_line(aes(group=rep_names)) + 
-    theme_sharp() + ggtitle( label = ML_td_fingerprints[i]) 
-  pdf(file = paste(writepdfs, ML_td_fingerprints[i], ".pdf", sep =""), width =50, height = 30)
-  print(p)
-  dev.off()
-
-  }
+# for( i in seq_along(ML_td_fingerprints)){
+# 
+#   plotData <- timedynamics_feats_long[ fingerprints %in% ML_td_fingerprints[i], ]
+#   plotData[ , cmax := factor(cmax_names, levels = c('0cmax', '1cmax', '5cmax', '10cmax', '50cmax', '100cmax'))]
+#   
+#   p <- ggplot(data =plotData, aes(x= cmax, y=value, color = rep_names )) + facet_wrap(~treatment_names)
+#   p<-p + geom_point() + geom_line(aes(group=rep_names)) + 
+#     theme_sharp() + ggtitle( label = ML_td_fingerprints[i]) 
+#   pdf(file = paste(writepdfs, ML_td_fingerprints[i], ".pdf", sep =""), width =50, height = 30)
+#   print(p)
+#   dev.off()
+# 
+#   }
 
 ## TODO remove based on QC plots and remove based on QC values
 
@@ -2122,14 +2127,18 @@ ML_data_final_long <- rbind(timedynamics_feats_long_mean, ML_data_QC_mean)
 ML_data_final_long <- ML_data_final_long[ cmax_names != '0cmax',]
 
 ML_data_final_long[ , fingerprints := paste( fingerprints, cmax_names, sep ="_" )]
-
+sort(unique(ML_data_final$treatment))
 ML_data_final <- dcast(data = ML_data_final_long, formula = treatment_names   ~ fingerprints, value.var = 'value' , fun = function(x) mean(x, na.rm=TRUE))
-
+sort(unique(ML_data_final_long$treatment))
+sort(unique(ML_data_final$treatment))
 
 ML_data_final[1:5,1:5]
 
 ind<- unique(which(is.na(ML_data_final), arr.ind = T)[,1])
+
 ML_data_final[ind, 1:5]
+
+
 
 dim(na.omit(ML_data_final))
 dim((ML_data_final))
@@ -2139,27 +2148,26 @@ ML_data_final <- data.table(ML_data_final)
 
 ML_data_final[treatment_names == "carbamazapine", treatment_names := 'carbamazepine']
 #ML_data_final[treatment_names == "carbamazepine", observations := gsub('carbamazapine', 'carbamazepine', observations) ]
-ML_data_final[treatment_names == "carbamazepine", 1:4]
+ML_data_final[treatment_names == "carbamazepine",1:4 ]
 ML_data_final[treatment_names == "etoposide ", treatment_names := 'etoposide' ]
 
 # annotate data
 annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
 
 annotationData <- data.table(annotationData)
-annotationData[ , X:=NULL]
-annotationData[, X.1:=NULL]
- annotationData[, X.2:=NULL]
- annotationData[, X.3:=NULL]
- annotationData[, X.4:=NULL]
 
 setkey(ML_data_final, 'treatment_names')  
 setkey(annotationData, 'treatment')
-
+dim(ML_data_final)
 ML_data_final <- annotationData[ML_data_final]
+
 ML_data_final[1:5,1:11]
+ML_data_final[ treatment == "carbamazepine", 1:4]
 save(ML_data_final, file = "../tmp/ML_data_final.Rdata")
 
-#TODO include solvability & daily dosage data
+sort(unique(ML_data_final$treatment))
+
+
 
 #as.data.frame(unique(all.data.norm[cmax == "1cmax" & treatment == "tacrolimus", list(treatment,cmax, dose_uM)]))
 
@@ -2171,7 +2179,14 @@ Fit time curves for time course plots
 
 
 ```{r fit_time}
+sort(unique(ML_data$treatment))
 load('../tmp/ML_data.Rdata')
+ML_data[treatment == "carbamazapine", treatment := 'carbamazepine']
+
+ML_data[treatment == "carbamazepine",1:4 ]
+ML_data[treatment == "etoposide ", treatment := 'etoposide' ]
+
+sort(unique(ML_data[ , treatment]))
 
 annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
 
@@ -2187,15 +2202,20 @@ ML_data <- annotationData[ML_data]
 # select data with fda label and correct dissolve
 unique(ML_data[ ,Bob_anot ])
 
-ML_data <- ML_data[ DILIConcern %in% c("Most-DILI-Concern", "Less-DILI-Concern", "No-DILI-Concern"),  ]
-ML_data <- ML_data[ EndDissolvedQuality == "yes",  ]
+ML_data <- ML_data[ DILIConcern != "N/A",  ]
 ML_data <- ML_data[ Bob_anot != "general_cytotox_reactive",  ]
-
+sort(unique(ML_data$treatment))
 # select features for plotting
 
 ML_data <- ML_data[ fingerprints %in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"), ]
+length(ML_data$singleCurveName)
+ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, dose_uM, replID, sep = "__")]
 
-ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, sep = "__")]
+sort(unique(ML_data$treatment))
+
+# testing for missing data; no missing data.
+write.table(unique(ML_data[order( treatment,fingerprints, cmax, dose_uM) , list(treatment,fingerprints, cmax, dose_uM)]),
+            file = "test.txt", sep = "\t")
 
 
 ML_data
@@ -2204,17 +2224,16 @@ GFP_data.list <- split(ML_data, ML_data$singleCurveName)
 length(GFP_data.list)
 
 ind<- lapply(GFP_data.list, function(x) { length(unique(x$timeAfterExposure)) }  )
-Srxn1 0.11514813              16.1 replicate_2 50cmax GFP_pos.2m_Srxn1 GFP_pos.2m_Srxn1__zimelidine__50cmax__replicate_2
+
 head(ind)
 sort(unique(unlist(ind)))
 
-indd <- lapply(ind, function(x) x == 4)
+indd <- lapply(ind, function(x) x < 12)
 inddd<- unlist(indd)
 length(inddd)
+sum(inddd)
 length(GFP_data.list)
 sum(inddd)
-
-
 
 GFP_data.list.lowTP <- GFP_data.list[inddd]
 length(GFP_data.list.lowTP)
@@ -2222,7 +2241,7 @@ ind3 <- lapply(GFP_data.list.lowTP, "[[", 'treatment')
 
 ind3 <- (sapply(ind3, unique)) == "zimelidine"
 GFP_data.list.lowTP[ind3]
-
+length(GFP_data.list)
 GFP_data.list <- GFP_data.list[!inddd]
 length(GFP_data.list.lowTP) 
 length(GFP_data.list) 
@@ -2233,9 +2252,7 @@ model.results.GFP_data_lowTP = list()
 #include the fitted parameters to perform a F-test
 # perform t-test for fitted/sampled values after model fit
 
-pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO.pdf", height = 6, width = 6)
-
-
+pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO.pdf", height = 8, width = 12)
 
 for( i in seq_along(GFP_data.list.lowTP) ){ #)
 
@@ -2255,7 +2272,7 @@ for( i in seq_along(GFP_data.list.lowTP) ){ #)
   
    p <- ggplot(data =  model.results.GFP_data_lowTP[[i]], aes(x=timeAfterExposure, y = mod)) + geom_point() + 
       geom_point(data= GFP_data.list.lowTP[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
-   ggtitle(unique(GFP_data.list.lowTP[[i]]$splitL)) + ylim(c(-1.2,1.2))
+   ggtitle(unique(GFP_data.list.lowTP[[i]]$singleCurveName)) + ylim(c(-1.2,1.2))
   
   print(p)
 }
@@ -2264,7 +2281,7 @@ dev.off()
 
 model.results.GFP_data = list()
 
-pdf(file = "../generate/results/model fit graphs with DMSO.pdf", height = 6, width = 8)
+pdf(file = "../generated/results/model fit graphs with DMSO.pdf", height = 8, width = 12)
 #nog een keer runnen (zonder pdf) - om fit p-waarden te extraheren
 for( i in seq_along(GFP_data.list)){ #
   
@@ -2285,13 +2302,13 @@ for( i in seq_along(GFP_data.list)){ #
   
   p <- ggplot(data =  model.results.GFP_data[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() + 
     geom_point(data= GFP_data.list[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
-    ggtitle(unique(GFP_data.list[[i]]$splitL)) + ylim(c(-1.2,1.2))
+    ggtitle(unique(GFP_data.list[[i]]$singleCurveName)) + ylim(c(-1.2,1.2))
   
   print(p)
   
   
   if((i%%1000)==0){
-   write.table(file = paste(graphDir, "progres", i ,".txt", sep =""), i/28521 )
+   write.table(file = paste("../tmp/progres", i ,".txt", sep =""), i/28521 )
   }
   
 }
@@ -2300,33 +2317,139 @@ dev.off()
 
 # dont forgot to combine low TP with high TP
 
-save.image("../tmp/20170207aftermodelrun.Rdata")
+save.image("../tmp/20170331aftermodelrun.Rdata")
+
 head(model.results.GFP_data[[3]])
 model.results.GFP_data.df <- do.call("rbind", model.results.GFP_data)
-
+sort(unique(model.results.GFP_data.df$treatment))
 model.results.GFP_data_lowTP.df <- do.call("rbind", model.results.GFP_data_lowTP)
 
 model.results.GFP_data.df <- rbind(model.results.GFP_data.df, model.results.GFP_data_lowTP.df)
 
 model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
 
+save(model.results.GFP_data.df, file = '../tmp/model.results.GFP_data.df.RData')
 
 ```
 
+```{r annotate}
+#annotate again, after modeling
 
+sort(unique(model.results.GFP_data.df$treatment))
+dir('../metadata')
+anotData <- read.delim( file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt' , sep ="\t" , header = TRUE)
+anotData <- as.data.table(anotData)
+setnames( anotData, old ='cmax', new = 'onecmax' )
+setkey(anotData, 'treatment')
+setkey(model.results.GFP_data.df, 'treatment' )
+model.results.GFP_data.df <- anotData[model.results.GFP_data.df]
 
+model.results.GFP_data.df[DILIConcern == "Most-DILI-Concern", diliClass := "severe"]
+model.results.GFP_data.df[DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
 
-
+``` 
 
 Create the time course figure
 
 ```{r, time_plots }
+# calculate mean 
+require(plyr)
+sort(unique(model.results.GFP_data.df[, treatment]))
+
+model.results.GFP_data.df.m <- model.results.GFP_data.df[ ,mean(mod, na.rm = TRUE) ,by = list(treatment, cmax, fingerprints, timeAfterExposure)]
+model.results.GFP_data.df.s <- model.results.GFP_data.df[ ,sd(mod, na.rm = TRUE) ,by = list(treatment, cmax, fingerprints, timeAfterExposure)]                            
+model.results.GFP_data.df.s
+setnames(model.results.GFP_data.df.m, old = "V1", new = "meanR")
+setnames(model.results.GFP_data.df.s, old = "V1", new = "sd")
+
+unique(model.results.GFP_data.df$fingerprints)
+unique(model.results.GFP_data.df$treatment)
+all.treats <- unique(model.results.GFP_data.df$treatment)
+length(all.treats)/3
 
 
+model.results.GFP_data.df
+model.results.GFP_data.df.m$treatment<- as.character(model.results.GFP_data.df.m$treatment)
+
+model.results.GFP_data.df.m$treatment <- factor(model.results.GFP_data.df.m$treatment, levels =
+                                                    sort(as.character(unique(model.results.GFP_data.df.m$treatment))) )
+model.results.GFP_data.df.m <- as.data.table(model.results.GFP_data.df.m)
+# for graphical purpose add dmso data for each cmax
+dmso <- model.results.GFP_data.df.m[ cmax == "0cmax", ]
+
+dmso$cmax  <- "1cmax"
+model.results.GFP_data.df.m <- rbind(model.results.GFP_data.df.m, dmso)
+dmso$cmax  <- "5cmax"
+model.results.GFP_data.df.m <- rbind(model.results.GFP_data.df.m, dmso)
+dmso$cmax  <- "10cmax"
+model.results.GFP_data.df.m <- rbind(model.results.GFP_data.df.m, dmso)
+dmso$cmax  <- "50cmax"
+model.results.GFP_data.df.m <- rbind(model.results.GFP_data.df.m, dmso)
+dmso$cmax  <- "100cmax"
+model.results.GFP_data.df.m <- rbind(model.results.GFP_data.df.m, dmso)
+
+model.results.GFP_data.df.m <- model.results.GFP_data.df.m[ cmax != "0cmax", ]
+
+model.results.GFP_data.df.m[ , cmax := factor(cmax, levels =
+                                                c("1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
 
 
+model.results.GFP_data.df.m[ , fingerprints := factor(fingerprints, levels =
+ c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"  ))]
+
+(as.data.frame(model.results.GFP_data.df.m[ treatment == "digoxin", .N,by = list(cmax, fingerprints)]))
+
+all.treats <- sort(as.character(unique(model.results.GFP_data.df.m$treatment)))
+
+# color annot.
+require(RColorBrewer)
+
+DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1,3,6)])
+hist(1:100 , col=DILIConcern)
+
+names(DILIConcern) <- c("No-DILI-Concern","Less-DILI-Concern", "Most-DILI-Concern")
+
+myColors <- list(DILIConcern = DILIConcern ) 
+
+myColors$cmax <- brewer.pal(5, "BuGn" )
+names(myColors$cmax) <- c("1cmax", "5cmax","10cmax", "50cmax", "100cmax")
+
+myColors$reporter <- c("light blue", "green", "#CC6633", "purple")
+names(myColors$reporter) <- c("Srxn1", "Chop", "p21", "Icam1")
+unique(model.results.GFP_data.df.m[, fingerprints])
+myColors$fingerprint <- c("blue", "seagreen", "#CC6633", "purple")
+names(myColors$fingerprint) <- c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"  )
+
+125/3
+42+40
+length(1:42)
+length(43:84)
+length(85:length(all.treats))
 
 
+if( !(dir.exists('../generated/results/time_figure'))){
+  dir.create('../generated/results/time_figure')
+}
+sel.comps <- sort(all.treats)[1:42]
+sel.comps <- sort(all.treats)[43:84]
+sel.comps <- sort(all.treats)[85:length(all.treats)]
+
+  pdf(file = "../generated/results/time_figure/time_fig 3 of 3 figure.pdf", height = 60, width = 10)
+  p<- ggplot(data= model.results.GFP_data.df.m[ treatment %in% sel.comps, ]  , aes(x = timeAfterExposure, y = meanR, color = fingerprints)) + facet_grid(  treatment ~ cmax) +
+    geom_line( size = 2)  + scale_color_manual(values=myColors$fingerprint) +
+    theme_bw() +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) 
+  p <- p + coord_cartesian( ylim =c(-1.1,1.1))
+  print(p)
+  dev.off()
+
+unique(model.results.GFP_data.df.m$treatment)
+
+# sessie 31032017_afterTimePlots.Rdata gesaved
 ```
 
 
@@ -2334,54 +2457,49 @@ Create the time course figure
 Create the dose response figure
 
 ```{r, dose_figure}
-dosePlot <- all.data.withDose[ fingerprints%in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1")]
-dosePlot[, fingerprints := factor(fingerprints, levels = c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"))]
-all.treats <- unique(dosePlot$treatment)
-length(all.treats)/ 4
-3*35 + 1* 36 # 141
+# calculate max in time
 
-105+36
-all.treats[1:35]
-all.treats[36:70]
-all.treats[71:105]
-all.treats[106:141]
 
-dir()
-#save.image("freeze2504_2016.RData")
-
-getwd()
-#setwd("E:/DILI screen/meta analyse DILI screen/")
-
-dir()
-getwd()
-
-gg_color_hue <- function(n) {
-  hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
+icamFun <- function(x) {
+  ifelse(abs(max(x)) >= abs(min(x)), max(x), min(x))
 }
-rcols <- gg_color_hue(4)
 
-pdf("figures/dose plots/dose response DILI 1 of 4_line.pdf", height=55, width=30)
-p<- ggplot(data=dosePlot[treatment%in% all.treats[1:35]] , aes(x = cmax, y = value)) +
-  geom_point(aes(color= fingerprints),size = 2) + facet_grid( treatment~fingerprints,  scales = "free_x" ) +
+
+
+model.results.GFP_data.df.m_maxtime <- model.results.GFP_data.df.m[ 
+   , icamFun(meanR), 
+by = list(treatment, cmax, fingerprints)]
+
+
+setnames(model.results.GFP_data.df.m_maxtime, old = "V1", new = "maxR")
+setnames(model.results.GFP_data.df.m_maxtime, old = "fingerprints", new = "fingerprint")
+if( !(dir.exists('../generated/results/dose_figure'))){
+  dir.create('../generated/results/dose_figure')s
+}
+sel.comps <- sort(all.treats)[1:42]
+sel.comps <- sort(all.treats)[43:84]
+sel.comps <- sort(all.treats)[85:length(all.treats)]
+
+length(unique(model.results.GFP_data.df.m_maxtime[, treatment]))
+
+unique(model.results.GFP_data.df.m_maxtime[, fingerprint])
+pdf(file = "../generated/results/dose_figure/concentration_figure.pdf", height = 80, width = 10)
+  p<- ggplot(data= model.results.GFP_data.df.m_maxtime  , aes(x = cmax, y = maxR, color = fingerprint)) + 
+    geom_point(size = 3)+
   
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
-                                    colour = "grey50") ) + theme( strip.text.x = element_text( )) +
-  
-  theme(plot.title = element_text(lineheight=.8, size = 14 )) + theme(legend.text=element_text(size=12))
-
-#p+geom_smooth(aes(group=treatment, color = fingerprints, size =6), method = "loess")
-p = p + geom_line(aes(group=treatment, color = fingerprints, size =6)) #+ theme(legend.position = "bottom"))
-p <- p + coord_cartesian( ylim =c(-1.1,1.1))  + theme_bw() +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) + geom_hline(yintercept=0, alpha = 0.5, linetype = 2) + 
-  scale_colour_manual(values =rcols[c(3,2,1,4)])
-print(p)
-dev.off()
-
+   facet_grid(  treatment ~ fingerprint) +
+    geom_line(aes(group = treatment), size = 2)  + 
+    geom_hline(yintercept = 0, linetype = 2)+
+    scale_color_manual(values=myColors$fingerprint) +
+    theme_bw() +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) 
+  p <- p + coord_cartesian( ylim =c(-1.1,1.1))
+  print(p)
+  dev.off()
 
 
 ```
@@ -2402,185 +2520,183 @@ Classes:
 ```{r feature_selection_and_prediction}
 require(ISLR)
 require(leaps) # best subset selection
-ML_data_final[, 1:10]
-ML_data_final_annot <-ML_data_final[,1:10]
-ML_data_final_data <- ML_data_final[,-(1:10)]
+load( file = "../tmp/ML_data_final.Rdata")
+ML_data_final[, 1:11]
+
+sort(unique(ML_data_final$treatment))
+
+# remove general reactive compounds
+
+unique(ML_data_final[ ,DILIConcern ])
+ML_data_final <- ML_data_final[ DILIConcern != "N/A",]
+
+unique(ML_data_final[, Bob_anot])
+ML_data_final <- ML_data_final[ Bob_anot != "general_cytotox_reactive",  ]
+
+ML_data_final_annot <-ML_data_final[,1:11]
+ML_data_final_data <- ML_data_final[,-(1:11)]
+
+ML_data_final_annot[DILIConcern == "Most-DILI-Concern", diliClass := "severe"]
+ML_data_final_annot[DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
 
 dim(ML_data_final)
 
 
 
-# choose annotation here;  
-
-ML_data_final_annot$DILIConcern <- factor(ML_data_final_annot$DILICon )
-
-ML_data_final_data[ , DILIConcern := ML_data_final_annot$DILIConcernOrig ]
+ML_data_final_annot$DILIConcern <- factor(ML_data_final_annot$DILIConcern )
+colnames(ML_data_final_annot)
+ML_data_final_annot$DILIConcern
+ML_data_final_data[ , DILIConcern := ML_data_final_annot$DILIConcern ]
 ML_data_final_data[ , EndDissolvedQuality := ML_data_final_annot$EndDissolvedQuality ]
+ML_data_final_data[ , Bob_anot := ML_data_final_annot$Bob_anot ]
+ML_data_final_data[ , diliClass := ML_data_final_annot$diliClass ]
 
 save(ML_data_final_data, file = '../tmp/ML_data_final_data.Rdata')
 save(ML_data_final_annot, file = '../tmp/ML_data_final_annot.Rdata')
 dim(ML_data_final_data)
-
-ML_data_final_data <- ML_data_final_data[ EndDissolvedQuality == "yes" ]
-
-ML_data_final_annot<-ML_data_final_annot[ EndDissolvedQuality == "yes" ]
-
-#ML_data_final_data <- ML_data_final_data[ DILIConcern %in% c("Most-DILI-Concern", "No-DILI-Concern") ]
+```
 
 
-ML_data_final_data[, DILIConcern := factor(DILIConcern)]
-dim(ML_data_final_data)
-table(ML_data_final_data$DILIConcern)
+
+```{r visualization_exploration}
+
+indmaxmag <- grepl( "maxMagnitudeValue", colnames(ML_data_final_data) )
+
+ML_data_final_data[, indmaxmag, with = F]
+
+sum(indmaxmag)
+anothm <- ML_data_final_data[, list(DILIConcern, diliClass)]
+head(ML_data_final_data[, indmaxmag, with = F])
+rmCompsInd <- ML_data_final_data$DILIConcern == "N/A"
+subSetexpl <- as.data.frame(ML_data_final_data[!rmCompsInd, indmaxmag, with = F])
+rownames(subSetexpl) <- ML_data_final_annot$treatment[!rmCompsInd]
+pdf("../generated/results/ML_data_QC/exploratory3.pdf", height = 32, width = 20)
+aheatmap(subSetexpl, annRow = anothm[!rmCompsInd,])
+dev.off()
+annotationData[ DILIConcern == "No-DILI-Concern"]
+table(paste0(anothm$DILIConcern))
+unique(anothm[!rmCompsInd,DILIConcern])
+```
 
 
-sum(is.na(ML_data_final_data))
-
+```{r Feature_selection}
 colnames(ML_data_final_data)
-# remove value start & value end & timeToTH
-
-#valueEnd
-#valueStart
-#timeToTH
-
-indrm1 <-grepl('valueEnd', colnames(ML_data_final_data))
-indrm2 <-grepl('valueStart', colnames(ML_data_final_data))
-indrm3 <-grepl('timeToTH', colnames(ML_data_final_data))
-indrm <- indrm1 | indrm2 | indrm3
-ML_data_final_data <- ML_data_final_data[ , !indrm, with = FALSE]
-
-ML_data_final_data[, EndDissolvedQuality := NULL]
-
-# select only essential features
-
-indMaxValue <- grepl("maxValue_100cmax", colnames(ML_data_final_data) )
-            colnames(ML_data_final_data)[indMaxValue]         
-indSlopeCellN <-  grepl("slope_CellNumber_100cmax", colnames(ML_data_final_data) )
-
-  indKeep <- colnames(ML_data_final_data)  %in% c("cmax", "necrosis_pos_100cmax",  "DILIConcern", "dissolveInfo") 
-
-
-indKeep <- indKeep | indMaxValue | indSlopeCellN
-
-ML_data_final_data <- ML_data_final_data[, indKeep, with = FALSE]
-
-
-
-
-# select based on variance & correlation
 dim(ML_data_final_data)
-ML_data_final_data[1:5, 200:201]
-unique(ML_data_final_data[, DILIConcern])
-ML_data_final_data <- ML_data_final_data[DILIConcern != 'N/A']
-ML_data_final_data <- ML_data_final_data[DILIConcern != 'Ambiguous DILI-concern']
-ML_data_final_data <- ML_data_final_data[DILIConcern != 'control']
-
-ML_data_final_data <- ML_data_final_data[DILIConcern != 'Less-DILI-Concern']
+dim(ML_data_final_annot)
 
 
+ML_data_final_annot$diliClass == ML_data_final_data$diliClass
+
+ML_data_final_data$treatment <- ML_data_final_annot$treatment
+
+ML_data_final_data$Bob_anot <- NULL
+ML_data_final_data$EndDissolvedQuality <- NULL
+ML_data_final_data$DILIConcern <- NULL
 
 
-ML_data_final_annot <- ML_data_final_annot[DILIConcern != 'N/A']
-ML_data_final_annot <- ML_data_final_annot[DILIConcern != 'Ambiguous DILI-concern']
-ML_data_final_annot <- ML_data_final_annot[DILIConcern != 'control']
+ML_data_final_data_long <- melt(ML_data_final_data, id.vars = c("diliClass", "treatment"))
+ML_data_final_data_long <- dcast(data = ML_data_final_data_long, variable+ treatment ~ diliClass  )
+ML_data_final_data_long <- as.data.table(ML_data_final_data_long)
+ML_data_final_data_long
+
+ML_data_final_data_long[!is.na(nonSevere) , value := nonSevere]
+ML_data_final_data_long[is.na(nonSevere) , value := severe]
+ML_data_final_data_long[ , normDiff := 
+                            (mean(severe, na.rm = TRUE) - mean(nonSevere, na.rm = TRUE)) / 
+                               sd(value) , by = variable ]
 
 
+length(unique(ML_data_final_data_long$variable)) #a 235 features.  
+length(unique(ML_data_final_data_long$treatment)) #a 124 treatments 
 
-ML_data_final_annot[, DILIConcern := gsub("Less-DILI-Concern", "DILI-Concern", DILIConcern)]
-ML_data_final_annot[, DILIConcern := gsub("Most-DILI-Concern", "DILI-Concern", DILIConcern)]
+featu_select <- ML_data_final_data_long[ , mean(normDiff), by = variable]
 
-ML_data_final_annot
-
-# two classes, too little observations for 3 classes
-ML_data_final_data[, DILIConcern := gsub("Less-DILI-Concern", "DILI-Concern", DILIConcern)]
-ML_data_final_data[, DILIConcern := gsub("Most-DILI-Concern", "DILI-Concern", DILIConcern)]
+#max of 13 features to avoid overfitting
 
 
-ML_data_final_data[, DILIConcern := factor(DILIConcern)]
-table(ML_data_final_data$DILIConcern)
-dim(ML_data_final_data)
+quantile(abs(featu_select$V1), prob = 0.8)
 
-# add dummy column to test funcitonality of current method
-ML_data_final_data[ , dummy := as.numeric(DILIConcern)]
-ML_data_final_data[ , dummy := dummy + 0.2*runif(135)]
+selPar <- quantile(abs(featu_select$V1), prob = 0.8)
 
-colnames(ML_data_final_data)
+sel_feats<-featu_select[abs(V1) > selPar] # 47 feats
+write.table(file = "../generated/results/selectedFeats.txt", sel_feats, sep ="\t")
 
-sel_vars <- ML_data_final_data[ ,lapply(.SD, function(x) median(x)) , by = DILIConcern]
-
-
-sel_vars_dif <- sapply(sel_vars[,-1], function(x) abs((x[1] - x[2]))/ median(x)) 
-
-sum(sel_vars_dif>1)
-
-indHighMeandiff <- sel_vars_dif>1
-sum(indHighMeandiff)
-dim(ML_data_final_data)
-mean(sapply(ML_data_final_data[, -161], function(x) mad(x - median(x))))
-colnames(ML_data_final_data)
-indHighVar <- abs(sapply(ML_data_final_data[, -161], function(x) mad(x - median(x)))) > 1
-
-sum(indHighVar)
+ind <- colnames(ML_data_final_data) %in% sel_feats$variable
+sel_data <- ML_data_final_data[ , ind, with = FALSE]
+write.table(cor(sel_data), file = "../generated/results/selFeatsCormatrix.txt", sep ="\t")
+# per cell line select least correlated features
+cor_data <- cor(sel_data)
+rownames(cor_data)
 
 
-indKeep <- indHighVar | indHighMeandiff
+#nonGFP
+nonGFP <- cor_data[, grepl("Speed", colnames(cor_data) )  | grepl("necrosis", colnames(cor_data) ) | grepl("Hoechst", colnames(cor_data) )  ]
+nonGFP <- nonGFP[ grepl("Speed", rownames(nonGFP) )  | grepl("necrosis", rownames(nonGFP) ) | grepl("Hoechst", rownames(nonGFP) ),  ]
+
+# ICAM1
+icam1 <- cor_data[, grepl("ICAM1", colnames(cor_data) )]
+icam1 <- icam1[ grepl("ICAM1", rownames(icam1) ), ]
+
+#DDIT3
+ddit3 <- cor_data[, grepl("DDIT3", colnames(cor_data) )]
+ddit3 <- ddit3[ grepl("DDIT3", rownames(ddit3) ), ]
+write.table(ddit3, file = "../generated/results/ddit3Cormatrix.txt", sep ="\t")
+# Srxn1
+srxn1 <- cor_data[, grepl("Srxn1", colnames(cor_data) )]
+srxn1 <- srxn1[ grepl("Srxn1", rownames(srxn1) ), ]
+write.table(srxn1, file = "../generated/results/srxn1Cormatrix.txt", sep ="\t")
+
+
+# remove biologically correlated features
+
+# there were no p21 predictors
+
+selFeats <- c("necrosis_pos_100cmax",
+              "slope_CellSpeed_100cmax",
+              "slope_Nuclei_Intensity_MeanIntensity_Image_Hoechst_100cmax",
+              
+  
+              "GFP_dif.m2_ICAM1_maxSlope_100cmax",
+              "GFP_dif.m2_ICAM1_maxSlope_50cmax",
+              
+              "GFP_pos.2m_DDIT3_maxMagnitudeValue_100cmax",
+              "GFP_pos.2m_DDIT3_maxSlope_10cmax",
+              
+              "GFP_pos.2m_Srxn1_maxMagnitudeValue_100cmax",
+              "GFP_pos.2m_Srxn1_maxMagnitudeValue_1cmax",
+              "GFP_pos.2m_Srxn1_maxSlope_50cmax", 
+              "GFP_pos.2m_Srxn1_slopeDomain_5cmax"
+  )
+
+
+``` 
+
+glm
+
+```{r ML}
+require(glmulti)
+
+indKeep <-  colnames(ML_data_final_data) %in% selFeats
+
+ML_data_final_data[, diliClass := ML_data_final_annot$diliClass ]
+ML_data_final_data[, diliClass := factor(diliClass) ]
 
 ML_data_final_data_sel <- ML_data_final_data[, indKeep, with = FALSE]
-
-ML_data_final_data_sel[ , DILIConcern := ML_data_final_data[, 161]]
-colnames(ML_data_final_data_sel)
-
+ML_data_final_data_sel$diliClass <- ML_data_final_annot$diliClass
 dim(ML_data_final_data_sel)
-
-corm <- cor( ML_data_final_data_sel[ , -43])
-require(NMF)
-pdf('heatmap.pdf', height = 30, width = 30)
-aheatmap(corm)
-dev.off()
-
-corm[8:10, 6:8]
-
-# for each variable, determine highly correlated variables. From these select 1.
-
-selCorm <- which(abs(corm) > 0.9 & abs(corm) != 1, arr.ind = TRUE)
-length(selCorm)
-
+ML_data_final_data_sel$diliClass <- factor(ML_data_final_data_sel$diliClass, levels =c("severe","nonSevere"))
 nobs <- nrow(ML_data_final_data_sel)
 
-train=sample(seq(nobs),round(nobs/1.5, digits=0),replace=FALSE)
+outputConfT = alist()
 
-train
+for( i in 1: 20) {
 
+    train=sample(seq(nobs),round(nobs/1.5, digits=0),replace=FALSE)
 
-
-# ?regsubsets
-# regfit <- regsubsets( DILIConcern~. , data=ML_data_final_data_sel[train,], nvmax=5, really.big = TRUE, method = "exhaustive")
-# plot(regfit)
-# 
-# summary(regfit)
-
-# nog aanpassen op accuracy
-
-
-# 
-# 
-# 
-# 
-# plot(val.errors,ylab="pred",ylim=c(0,4),pch=19,type="b")
-# points((regfit$rss[-1]/180),col="blue",pch=19,type="b")
-# legend("topright",legend=c("Training","Validation"),col=c("blue","black"),pch=19)
-# 
-
-?glmulti
-
-dim(ML_data_final_data_sel)
-inrm <-grepl("1cmax", colnames(ML_data_final_data_sel))
-
-
-
-
-glmulti.logistic.out <-
-    glmulti(DILIConcern ~ ., data = ML_data_final_data_sel[, !inrm, with = FALSE],
+  glmulti.logistic.out <-
+    glmulti(diliClass ~ ., data = ML_data_final_data_sel[train,],
             level = 1,               # No interaction considered
+            maxsize = 11,
             method = "g",
             crit = "aic",            # AIC as criteria
             confsetsize = 5,         # Keep 5 best models
@@ -2589,75 +2705,51 @@ glmulti.logistic.out <-
             family = binomial)       # binomial family for logistic regression
 
 
-
 ## Show 5 best models (Use @ instead of $ for an S4 object)
 # glmulti.logistic.out@formulas
 
 summary(glmulti.logistic.out@objects[[1]])
-predictt <- predict(glmulti.logistic.out@objects[[1]], newdata = ML_data_final_data_sel, type = 'response' ) >0.2
 
+tabl(dML_data_final_data_sel$diliClass)
 
-cbind(ML_data_final_data_sel$DILIConcern, predictt+1) 
+acc = alist()
+sens = alist()
+spec = alist()
+probs <- seq(0,1, length.out = 11)
 
-sum(as.numeric(ML_data_final_data_sel$DILIConcern) ==  predictt+1) / length(ML_data_final_data_sel$DILIConcern)
+for( j in seq_along(probs)) {
 
-table(ML_data_final_data_sel$DILIConcern)
+  predictt <- predict(glmulti.logistic.out@objects[[1]], newdata = ML_data_final_data_sel[-train,], type = 'response' ) >= probs[j]
 
-100/115
-```
+predict_lab <- replace(predictt, predictt, "nonSevere" )
+predict_lab <- replace(predict_lab, predict_lab == "FALSE", "severe" )
+predict_lab <- factor(predict_lab, levels = c("severe", "nonSevere"))
 
+conft<- table(data.frame( data = ML_data_final_data_sel$diliClass[-train],predict = predict_lab))
 
-```{r}
+acc[[j]] <- sum(diag(conft)) / sum(conft)
+sens[[j]] <- conft[1,1] / sum(conft[1,])
+spec[[j]] <- conft[2,2] / sum(conft[2,])
 
-
-
-
-
-ncol(ML_data_final_data_sel)
-
-for (i in 1:ncol(ML_data_final_data_sel)-1) {
-
-  print(qr(ML_data_final_data_sel[,1:i])$rank) 
-  print(i) 
-  print(colnames(ML_data_final_data_sel)[i])
-  print("###") 
 }
 
+outputConfT[[i]] <-  data.frame(run = i, prob = probs, acc = unlist(acc), sens = unlist(sens), spec = unlist(spec))
 
-
-# 
-# 
-# 
-# indrm <- sample(1:41, 12)
-# glmulti.logistic.out <-
-#     glmulti(DILIConcern ~ ., data = ML_data_final_data_sel_scaled[ , -c(indrm), with = FALSE],
-#             level = 1,               # No interaction considered
-#             method = "h",            # Exhaustive approach
-#             crit = "aic",            # AIC as criteria
-#             confsetsize = 5,         # Keep 5 best models
-#             plotty = F, report = F,  # No plot or interim reports
-#             fitfunction = "glm",     # glm function
-#             family = binomial)       # binomial family for logistic regression
-# 
-# ## Show 5 best models (Use @ instead of $ for an S4 object)
-# glmulti.logistic.out@formulas
+  }
+ 
+  write.table( do.call('rbind' , outputConfT), file = "../generated/results/glmulti_20runs_ROCprobs.txt", sep ="\t", col.names = NA)
 
 ```
 
+remark; noticed I am only missing digoxin from the data at this point. cannot explain why yet (26-4-2017)
 
 random forrest + importance plot
 ```{r }
-install.packages('gbm')
+
 require(gbm)
 require(MASS)
-
-
-
-# try different method better suited for many variables; SVM
-
-install.packages("caret")
 require(caret)
-set.seed(825)
+
 fitControl <- trainControl(method = "repeatedcv",
                            number = 10,
                            repeats = 10,
@@ -2667,239 +2759,85 @@ fitControl <- trainControl(method = "repeatedcv",
                            ## the following function
                            summaryFunction = twoClassSummary)
 
-#ML_data_final_data_sel <- ML_data_final_data
-
-ML_data_final_data_sel <- hm_data
-ML_data_final_data_sel$DILIConcern
-
-
-ML_data_final_data_sel[DILIConcern == "No-DILI-Concern", DILIConcern := "noDILI"]
-
-ML_data_final_data_sel[DILIConcern == "Most-DILI-Concern", DILIConcern := "DILI"]
-
-ML_data_final_data_sel <- ML_data_final_data_sel[ DILIConcern %in% c("noDILI", "DILI")]
-
-ML_data_final_data_sel[, DILIConcern]
-
-ML_data_final_data_sel[, DILIConcern := factor(DILIConcern) ]
-table(ML_data_final_data_sel[, DILIConcern])
-
 
 nobs <- nrow(ML_data_final_data_sel)
-trainInd <- sample(1:nobs, 0.7*nobs, replace=FALSE)
-
 testlist = list()
+table(ML_data_final_data_sel$diliClass)
 
-for( i in 1:100) {
-train1 <- which(ML_data_final_data_sel$DILIConcern == "DILI")
-train2 <-  which(ML_data_final_data_sel$DILIConcern == "noDILI")
-
-train1 <- sample(train1, 10, replace = FALSE)
-train2 <- sample(train2, 10, replace = FALSE)
-
-trainInd <- c(train1, train2)
-
-#table(ML_data_final_data_sel[trainInd , DILIConcern])
-#table(ML_data_final_data_sel[-trainInd , DILIConcern])
-
-#ML_data_final_data_sel[, dummy := NULL]
-#ML_data_final_data_sel[, treatment := NULL]
-# ML_data_final_data_sel[1:5,1:10]
-# 
-# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(1,2)]
-# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(2,6)]
-# 
-# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(2,4)]
-# 
-# ML_data_final_data_sel <- ML_data_final_data_sel[, -c(2,4)]
-# 
-# ML_data_final_data_sel[, cmax := as.numeric(cmax)]
+ML_data_final_data_sel$diliClass <- factor(ML_data_final_data_sel$diliClass, levels = c("severe", "nonSevere"))
 
 
-#ML_data_final_data_sel[ , dummy := as.numeric(DILIConcern) + runif(nrow(ML_data_final_data_sel))]
-#ML_data_final_data_sel[, dummy := NULL]
-
-
-svmFit <- train( DILIConcern~ ., data = ML_data_final_data_sel[ trainInd, ], 
-                 method = "svmRadial",
+svmFit <- train( diliClass~ ., data = ML_data_final_data_sel, 
+                 method = "svmRadial", degree = 3, #svmRadial
                  trControl = fitControl, 
                  preProc = "keep",
                  tuneLength = 8,
                  metric = "ROC")
 
 
-
-#save(svmFit, file = "svmFit_ROC.Rdata")
-#svmFit   Spec Sens ROC
-
-#predict(svmFit, newdata = ML_data_final_data_sel[-trainInd, ] )
-
-#plot(ML_data_final_annot$DILIConcern, ML_data_final_data_sel[, GFP_pos.2m_Srxn1_maxValue_100cmax])
-
-
-
-testlist[[i]] <- table(data.frame(predict = as.character(predict(svmFit, newdata = abs(ML_data_final_data_sel[-trainInd,] ))), data = as.character(ML_data_final_data_sel$DILIConcern[-trainInd])))
-
-}
-
-
-for( i in seq_along(testlist)){
-
-if( nrow(testlist[[i]]) == 1) {
-if(rownames(testlist[[]]) != "DILI"){
-  stop("df")
-}
-testlist[[i]] <- rbind(testlist[[i]], c(0,0))  
-rownames(testlist[[i]])[2] <- "noDILI"
-class(testlist[[i]]) <- "table"
-    }
-}
-warnings()
-
-spec = list()
-for( i in seq_along(testlist)){
-spec[[i]] <- sum(diag(testlist[[i]]))/ sum(testlist[[i]])
-}
-
-pos_pred = list()
-for( i in seq_along(testlist)){
-pos_pred[[i]] <- testlist[[i]][1,1] / (sum(testlist[[i]][,1]))
-}
-
-neg_pred = list()
-for( i in seq_along(testlist)){
-neg_pred[[i]] <- testlist[[i]][2,2] / (sum(testlist[[i]][,2]))
-}
-
-mean(unlist(spec)) # 0.82 accuracy
-random : 5/6 
-mean(unlist(pos_pred))  # 0.972
-mean(unlist(neg_pred)) # 0.06
-
-
-
-
-write.table(as.data.frame(testlist), sep = "\t", file = "result_pred.txt")
-
-test <- as.data.frame(testlist)
-
-
-save(mylist, file = "radial_ROC.Rdata")
-
-
-
-
-
-svmFit <- train( DILIConcern~ ., data = ML_data_final_data_sel[ trainInd, ], 
-                 method = "radial", degree = 3, 
+svmFit <- train( diliClass~ ., data = ML_data_final_data_sel, 
+                 method = "svmRadial", degree = 2, 
                  trControl = fitControl, 
                  preProc = c("center", "scale"),
                  tuneLength = 8,
                  metric = "ROC")
-#svmFit   
-
-#predict(svmFit, newdata = ML_data_final_data_sel[-trainInd, ] )
-
-
-
-ML_data_final_data_sel[, treatment := ML_data_final_annot$treatment]
-
-
-
-
-ggplot(data = ML_data_final_data_sel, aes(x= treatment, y =GFP_pos.2m_Srxn1_maxValue_100cmax, color = DILIConcern )) + geom_point() + 
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
-                                       colour = "grey50") )
-plot(as.factor(ML_data_final_annot$treatment), ML_data_final_data_sel[, GFP_pos.2m_Srxn1_maxValue_100cmax],  col = as.factor(ML_data_final_data_sel$DILIConcern))
-
-plot( ML_data_final_data_sel[, GFP_pos.2m_Srxn1_maxValue_100cmax], col = ML_data_final_data_sel$DILIConcern)
-
-
-
-table(data.frame(predict = as.character(predict(svmFit, newdata = ML_data_final_data_sel[-trainInd,] )), data = as.character(ML_data_final_data_sel$DILIConcern[-trainInd])))
-
-
 
 library(e1071)
 ML_data_final_data
-ML_data_final_data_sel <- ML_data_final_data
-train <- sample(1:nrow(ML_data_final_data_sel), 34, replace = FALSE)
 
-table(ML_data_final_data_sel$DILIConcern[train])
-table(ML_data_final_data_sel$DILIConcern[-train])
+# e1071 test
+outputConfT = alist()
+for(i in 1:50) {
+train <- sample(1:nrow(ML_data_final_data_sel), 82, replace = FALSE)
 
-svmfit=svm(DILIConcern~.,data=ML_data_final_data_sel[train,],kernel="linear", cost=10,scale=FALSE)
+table(ML_data_final_data_sel$diliClass[train])
+table(ML_data_final_data_sel$diliClass[-train])
 
+svmfit=svm(diliClass~.,data=ML_data_final_data_sel[train,],kernel="radial", cost=10,scale=FALSE)
 
-sum(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] ) == ML_data_final_data_sel$DILIConcern[-train])/ length(ML_data_final_data_sel$DILIConcern[-train])
+sum(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] ) == ML_data_final_data_sel$diliClass[-train])/ length(ML_data_final_data_sel$diliClass[-train])
 
+table(data.frame(predict = as.character(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] )), data = as.character(ML_data_final_data_sel$diliClass[-train])))
 
-table(data.frame(predict = as.character(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] )), data = as.character(ML_data_final_data_sel$DILIConcern[-train])))
+conft<- table(data.frame(predict = as.character(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] )), data = as.character(ML_data_final_data_sel$diliClass[-train])))
 
+acc <- sum(diag(conft)) / sum(conft)
+sens <- conft[2,2] / sum(conft[, 2])
+spec <- conft[1,1] / sum(conft[,1])
 
+outputConfT[[i]] <-  data.frame(run = i,  acc = unlist(acc), sens = unlist(sens), spec = unlist(spec))
+}
 
-table(ML_data_final_data_sel$DILIConcern[-train])
+e1071svm_radial3 <- do.call('rbind' , outputConfT)
+colMeans(e1071svm_radial3)
+write.table(e1071svm_radial3,file = "../generated/results/e1071svm_radial3.txt", sep = "\t", col.names = NA)
 
+# tree methods
+varImp = alist()
+outputConfT = alist()
+for( i in 1:50) {
+# 56 and 68
 
-sum(svmfit$fitted == ML_data_final_data_sel$DILIConcern) / nrow(ML_data_final_data_sel)
+train1 <- which(ML_data_final_data_sel$diliClass == "severe")
+train2 <-  which(ML_data_final_data_sel$diliClass == "nonSevere")
 
-cbind(as.character(svmfit$fitted), as.character(ML_data_final_data_sel$DILIConcern))
-table(ML_data_final_data_sel$DILIConcern)
-
-
-
-
-
-
-# call bullshit on following;
-# plan voor vanavdond: neem alle variabelen mee. Gebruik subsets van variabelen en herhaal heel vaak. Gebruik 3 klassen.
-# hou alle resultaten bij: belangrijkste variabelen (steeds hoe vaak in top 10/ of beter de variable importance waarden optellen + bijhouden hoe vaak welke compounds goed geanoteerd worden)
-
-# adv belangrijkste variabelen deze subset nemen en weer predicties doen.
-# verhaal: moeilijk annotatie goed. 
-# moet enige verrijking van predictie krijgen.
-# daarmee dan de belangrijkste variabelen noemen.
-
-dim(ML_data_final_data_sel)
-
-nobs <- nrow(ML_data_final_data_sel)
-
-dim(ML_data_final_data)
-lapply(ML_data_final_data, class)
-
-as.numeric(ML_data_final_data$cmax)
-
-ML_data_final_data_sel <- ML_data_final_data[ , cmax := as.numeric(cmax)]
-ML_data_final_data_sel <- ML_data_final_data
-ML_data_final_data_sel <- ML_data_final_data_sel[ dissolveInfo == "dissolved", ]
-ML_data_final_data_sel$dissolveInfo <- NULL
-
-table(ML_data_final_data_sel$DILIConcern)
-
-ML_data_final_data_sel[, dummy:=as.numeric(DILIConcern)]
-ML_data_final_data_sel[ , dummy := dummy + runif(68)]
-
-train1 <- which(ML_data_final_data_sel$DILIConcern == "Most-DILI-Concern")
-train2 <-  which(ML_data_final_data_sel$DILIConcern == "No-DILI-Concern")
-train1 <- sample(train1, 18, replace = FALSE)
-train2 <- sample(train2, 18, replace = FALSE)
+train1 <- sample(train1, round(length(train1)/1.5, digits = 0), replace = FALSE)
+train2 <- sample(train2,round(length(train2)/1.5, digits = 0), replace = FALSE)
 
 train <- c(train1, train2)
-ML_data_final_data_sel[, dummy:=NULL]
-dim(ML_data_final_data_sel)
 
-table(ML_data_final_data_sel[train, DILIConcern])
+table(ML_data_final_data_sel[train, diliClass])
+table(ML_data_final_data_sel[-train, diliClass])
 
-dim(ML_data_final_data_sel[train,])
+boost.out=gbm(diliClass~.,data= ML_data_final_data_sel[train,],distribution="multinomial",n.trees=50000,shrinkage=0.005,interaction.depth=1)
 
-colnames(ML_data_final_data_sel)
-ML_data_final_data_sel <- ML_data_final_data_sel[, c(1,2,3,5,6,10,11)]
-boost.out=gbm(DILIConcern~.,data= ML_data_final_data_sel[train,],distribution="multinomial",n.trees=50000,shrinkage=0.005,interaction.depth=1)
-
+varImp[[i]] <- summary.gbm(boost.out)
 
 summary(boost.out)
 dim(ML_data_final_data_sel)
-predmat=predict(boost.out,newdata=ML_data_final_data_sel[-train, -11],n.trees=50000, type = "response")
+predmat=predict(boost.out,newdata=ML_data_final_data_sel[-train, -12],n.trees=50000, type = "response")
+
+
 
 dim(predmat)
 head(predmat[,, ])
@@ -2909,80 +2847,45 @@ predmat <- predmat[,,1]
 p.predmat <- apply(predmat, 1, which.max)
 
 # total accuracy
-c('Most-DILI-Concern', 'No-DILI-Concern')[c(1,1,1,1,2,1)]
-predictedClasses <- c('Most-DILI-Concern', 'No-DILI-Concern')[p.predmat] 
+c('severe', 'nonSevere')[c(1,1,1,1,2,1)]
+predictedClasses <- c('severe', 'nonSevere')[p.predmat] 
 
-isEqClasses <- predictedClasses== ML_data_final_data_sel[-train, 11]
-
-sum(isEqClasses ) / nrow(ML_data_final_data_sel[-train, 11])
+predictedClasses <- factor(predictedClasses, levels = c("severe", "nonSevere"))
 
 
-31/(31+18)
+conft<- table(data.frame(predict = predictedClasses , data = ML_data_final_data_sel$diliClass[-train]))
 
-table(ML_data_final_data_sel[-train, DILIConcern])
+acc <- sum(diag(conft)) / sum(conft)
+sens <- conft[1,1] / sum(conft[, 1])
+spec <- conft[2,2] / sum(conft[,2])
 
+outputConfT[[i]] <-  data.frame(run = i,  acc = unlist(acc), sens = unlist(sens), spec = unlist(spec))
+}
 
-table(ML_data_final$DILIConcern)
-table(ML_data_final_data_sel$DILIConcern)
+colMeans(do.call('rbind' ,outputConfT))
 
-table(ML_data_final_data_sel$DILIConcern[ -train])
+outputConfT
 
-compNames <- ML_data_final[!DILIConcernOrig %in% c("N/A", "Ambiguous DILI-concern", "control", "Less-DILI-Concern"),treatment] 
-11
-cbind(compNames[-train], ML_data_final_data_sel[-train, 11], predictedClasses, isEqClasses, predmat)
-
-
-
-## TODO friday:
-# meer no-DILI
-# heel vaak gbm's en bijhouden hoe vaak variale-important eruit komt.
-# met meer no-DILI hopelijk doet de test set het beter
-# voeg daily dose en lipophilicity toe
+write.table(do.call('cbind',varImp),file = "../generated/results/varImp-boostingtree.txt", sep = "\t", col.names=NA)
+write.table(do.call('rbind' ,outputConfT), file = "../generated/results/boostingtree.txt", sep = "\t", col.names=NA)
 
 
-# random
-tmp1 <- sample(1:3, 1000, replace = TRUE)
-tmp2 <- sample(1:3, 1000, replace = TRUE)
-sum(tmp1 == tmp2)/ 1000
-
-ML_data_final$DILIConcern
-ML_data_final[1:5,1:5]
-
-
-plot(n.trees,berr,pch=19,ylab="Mean Squared Error", xlab="# Trees",main="Boosting Test Error")
-abline(h=min(test.err),col="red")
-
-
-
-plot(boost.boston,i="lstat")
-plot(boost.boston,i="rm")
-
-```
-
-Lets make a prediction on the test set. With boosting, the number of trees is a tuning parameter, and if we have too many we can overfit. So we should use cross-validation to select the number of trees. We will leave this as an exercise. Instead, we will compute the test error as a function of the number of trees, and make a plot.
-
-```{r}
-n.trees=seq(from=100,to=10000,by=100)
-predmat=predict(boost.boston,newdata=Boston[-train,],n.trees=n.trees)
-dim(predmat)
-berr=with(Boston[-train,],apply( (predmat-medv)^2,2,mean))
-plot(n.trees,berr,pch=19,ylab="Mean Squared Error", xlab="# Trees",main="Boosting Test Error")
-abline(h=min(test.err),col="red")
+colMeans(do.call('rbind' ,outputConfT))
 
 ```
 
 
 
-heatmap voor poster/ publicatie
-Main gevoelige-responses van elke reporter
-Ergste oplosbare verwijderen.
-DILI annotatie
 
 
+#== check of dit nog klopt. (input data)
 
 ```{r heatmap}
-rm("all.data.norm")
-load('../tmp/all.data.norm.Rdata')
+#rm("all.data.norm")
+
+which("digoxin" == unique(all.data.norm$treatment))
+
+#load('../tmp/all.data.norm.Rdata')
 colnames(all.data.norm)
 unique(all.data.norm[, fingerprints])
 all.data.norm[, variable:=NULL]
@@ -3072,7 +2975,7 @@ hm_data_max <- hm_data_max[ , mean(V1), by = list(treatment, cmax, fingerprints)
 setnames(hm_data_max, old = "V1", new = "value")
 
 
-annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_10012017.txt', sep = "\t", header = T )
+annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
 
 annotationData <- data.table(annotationData)
 setnames(annotationData, old = "cmax", new = "cmaxDose")
@@ -3082,7 +2985,7 @@ hm_data_max[ treatment == "etoposide ", treatment := "etoposide"]
 setkey(hm_data_max, 'treatment')  
 setkey(annotationData, 'treatment')
 hm_data_max <- annotationData[hm_data_max]
-
+sort(unique(hm_data_max$treatment))
 save(file = '../tmp/hm_data_max_.Rdata', data = hm_data_max) # 11-1-2017 16.33
 
 summary(hm_data_max[, value])
@@ -3112,8 +3015,10 @@ hm_data_max <- rbind(hm_data_max, dmsoD)
 hm_data_max[ , fingerprints:= paste(fingerprints, cmax, sep = "_")]
 
 # need a fix for DMSO
+colnames(hm_data_max)
+hm_data_max_w <- dcast(hm_data_max, treatment + Bob_anot + DILIConcern  ~ fingerprints  , value.var = "value" )
 
-hm_data_max_w <- dcast(hm_data_max, treatment + EndDissolvedQuality + DILIConcern ~ fingerprints  , value.var = "value" )
+
 
 hm_data_max_w[1:5,1:5]
 
@@ -3126,38 +3031,44 @@ hm_data_max_w <- as.data.table(hm_data_max_w)
 class(hm_data_max_w)
 
 table(hm_data_max_w[, DILIConcern])
-hm_data_max_w <- hm_data_max_w[ ! DILIConcern %in% c("N/A", "Ambiguous DILI-concern")]
+hm_data_max_w <- hm_data_max_w[ ! DILIConcern %in% "N/A"]
 hm_data_max_w[ ,DILIConcern := factor(DILIConcern)]
 colnames(hm_data_max_w)[1:10]
-
-unique(hm_data_max_w[, EndDissolvedQuality ])
-hm_data_max_w <- hm_data_max_w[EndDissolvedQuality == "yes", ]
+unique(hm_data_max_w)
+hm_data_max_w <- hm_data_max_w[Bob_anot != "general_cytotox_reactive", ]
+sort(unique(hm_data_max_w$treatment))
+hm_data_max_w[ DILIConcern == "Most-DILI-Concern", diliClass := "severe"]
+hm_data_max_w[ DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
 
 hm_data_treatments <- hm_data_max_w$treatment
 hm_data_DILIConcern <- hm_data_max_w$DILIConcern
+head(hm_data_data)
+colnames(hm_data_max_w)
+hm_data_data <- as.matrix(hm_data_max_w[, -c(1:3,84)] )
 
-hm_data_data <- as.matrix(hm_data_max_w[, -c(1:3)] )
 rownames(hm_data_data) <- hm_data_treatments
-
+hm_data_max_w[,1:5,1:3]
 
 # color annotations
 require(RColorBrewer)
 
-DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1,3,6)])
+diliClass <-  c(brewer.pal(9,"YlOrRd")[c(1,6)])
+DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1, 2, 3,6)])
 hist(1:100 , col=DILIConcern)
 
-names(DILIConcern) <- c("No-DILI-Concern","Less-DILI-Concern", "Most-DILI-Concern")
+names(DILIConcern) <- c("No-DILI-Concern", "Ambiguous DILI-concern", "Less-DILI-Concern", "Most-DILI-Concern")
+names(diliClass) <- c("nonSevere", "severe")
 
-myColors <- list(DILIConcern = DILIConcern ) 
+myColors <- list(DILIConcern = DILIConcern, diliClass = diliClass ) 
 
 myColors$cmax <- brewer.pal(5, "BuGn" )
 names(myColors$cmax) <- c("cmax1", "cmax5","cmax10", "cmax50", "cmax100")
 
 myColors$reporter <- c("light blue", "light green", "#CC6633", "purple")
 names(myColors$reporter) <- c("Srxn1", "Chop", "p21", "Icam1")
-
-treatmentAnot<-data.frame(DILIConcern = hm_data_DILIConcern)
-
+hm_data_max_w$diliClass <- factor(hm_data_max_w$diliClass, levels =c("severe", "nonSevere"))
+treatmentAnot<-data.frame(DILIConcern = hm_data_DILIConcern, diliClass = hm_data_max_w$diliClass)
+cbind(as.character(hm_data_DILIConcern), as.character(hm_data_max_w$diliClass))
 
 # color anotations for columns. 
 # order columns, create triple color annotation: reporter, sensitivity, cmax
@@ -3195,22 +3106,35 @@ my.colors <- c(rev(brewer.pal(9, "YlGnBu")) , brewer.pal(9, "YlOrRd"))
 pie(rep(1, length(my.colors)), labels = sprintf("%d (%s)", seq_along(my.colors), 
                                                 my.colors), col = my.colors)
 
-?hclust
-?dist
-# cluster and reorder rows;
-dist_hm_data <- dist(hm_data_data, method = "manhattan")
-clust_hm_data<-hclust(dist_hm_data, method = "median")
-pdf("../generated/results/rowClusterDendogram_manh_median.pdf", width = 24, height = 8)
-plot(clust_hm_data)
+install.packages("dendextend")
+library(dendextend)
+
+dist_hm_data <- dist(hm_data_data, method = c("euclidean", "maximum", "manhattan", "canberra", "binary" , "minkowski")[3])
+
+clust_hm_data<-hclust(dist_hm_data, method = c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median","centroid")[1])
+dd <- as.dendrogram(clust_hm_data)
+dd.reorder <- reorder(dd, wts =  c(150, 125:2))
+
+#cutree(dd.reorder,h=7) # it now works on a dendrogram#
+# It is like using:
+#dend1 <-dendextend:::cutree.dendrogram(dd.reorder,h=7)
+
+dend1 <- color_branches(dd.reorder, k = 3)
+dend1 <- color_labels(dend1, k = 3)
+plot(dend1)
+
+pdf("../generated/results/heatmap/rowClusterDendogram_manh_wardD.pdf", width = 24, height = 10)
+plot(dend1)
 dev.off()
 
-hm_data_rowOrder <- clust_hm_data$labels[clust_hm_data$order]
+
+hm_data_rowOrder <- labels(dend1)
 
 indOrder <- match( hm_data_rowOrder, rownames(hm_data_data))
 
 
-
-pdf("../generated/results/heatmap_manh_ward.pdf", width= 12, height = 18)
+head(hm_data_data)
+pdf("../generated/results/heatmap/heatmap_manh_wardD.pdf", width= 12, height = 18)
 aheatmap(hm_data_data[ indOrder ,colIndex], Rowv = NA, Colv=NA, 
          color = my.colors, breaks = colBreaks,
          fontsize = 10, width = 10, height=10, legend = TRUE,
@@ -3218,8 +3142,18 @@ aheatmap(hm_data_data[ indOrder ,colIndex], Rowv = NA, Colv=NA,
 )
 dev.off()
 
+?reorder
+```
+
+
+
+
+```{r statistics}
+
 
 ```
+
+
 
 
 extra figuur voor poster/ presentatie
@@ -3253,23 +3187,6 @@ ggplot(tempFigure_l, aes( x = treatment, y = value, color = DILIConcern )) + geo
 
 head(tempFigure_l)
 ```
-
-
-adv meeting bob/steven;
-minimaal parameter en compound set:
-per reporter belangrijkste (alleen 50 en 100 cmax)
-de zeer slecht oplosbare niet
-valideer response in PHH
-kies alleen severe dili en non dili
-voeg cmax waarde toe
-check of daily dose/ logP voldoende aanwezig is op deze set
-
-```{r min_set}
-
-
-
-```
-
 
 
 
