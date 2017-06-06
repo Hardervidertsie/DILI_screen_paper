@@ -1,7 +1,8 @@
 
 require(data.table)
 require("fda.usc")
-model.results.GFP_data.df <- load("data/model.results.GFP_data.df.Rdata")
+
+ load("../tmp/model.results.GFP_data.df.Rdata")
 model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
 
 all.fingerprints <- unique(model.results.GFP_data.df[, fingerprints])

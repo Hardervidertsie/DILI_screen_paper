@@ -87,6 +87,7 @@ There is a distinct difference in the screening procedure between the full scree
 ICAM.path <- "../data/Rdata files ICAM1/"
 ICAM.files <- dir(ICAM.path)[grepl(".Rdata", dir(ICAM.path) )]
 ICAM.raw =list()
+
 for(i in seq_along(ICAM.files)) 
 {
 print(i)
@@ -96,7 +97,6 @@ ICAM.raw[[i]] <- outputList
 ICAM.raw[[i]]$myDT$set <- "oldcmax"
   rm("outputList")
 }
-
 
 
 ```
@@ -248,12 +248,14 @@ TH.cols
 #calculate mean of DMSO for <= 0.2 concentration for each time point
 mean.dmso.colnames <- paste("meanDMSO_", TH.cols, sep="")
 
+plot(density(ICAM.raw[[1]]$myDT[ treatment == "DMSO" & cell_line == "ICAM1" & timeID != 1, obj_cyto_only_Intensity_IntegratedIntensity_image_GFP]))
+
 meanDMSO = list()
 for(i in seq_along(ICAM.raw)) {
   print(paste("i: ", i ))
   ICAM.raw[[i]]$myDT[, dose_uM:= as.numeric(as.character(ICAM.raw[[i]]$myDT[, dose_uM]))]# change factor to numeric of dose 
     meanDMSO[[i]] <-  ICAM.raw[[i]]$myDT[ treatment %in% "DMSO" & dose_uM <= 0.2 ,  
-                                                               lapply(.SD, function(x) { mean(x, na.rm=TRUE) }),
+                                                               lapply(.SD, function(x) { median(x, na.rm=TRUE) }),
                                                                by = c("plateID",   "timeID"),
                                                                .SDcols =
                                                                  TH.cols
@@ -269,22 +271,22 @@ for(i in seq_along(ICAM.raw)) {
 
 # subtract these DMSO background values values
 
-ICAM.raw[[i]]$myDT
-
-normCols <- paste("norm", TH.cols, sep ="_")
-
-for(i in seq_along(ICAM.raw)) {
-  print(paste("i: ", i ))
- 
-  for(j in seq_along(normCols)) {
-    print(j)
-    print(normCols[j])
-    print(TH.cols[j])
-    print(mean.dmso.colnames[j])
-    
-       ICAM.raw[[i]]$myDT[, normCols[j]:= (get(TH.cols[j]) - get(mean.dmso.colnames[j]) ) ] # norm cols as the values = DMSO averages 
-  }
-}
+# ICAM.raw[[i]]$myDT
+# 
+# normCols <- paste("norm", TH.cols, sep ="_")
+# 
+# for(i in seq_along(ICAM.raw)) {
+#   print(paste("i: ", i ))
+#  
+#   for(j in seq_along(normCols)) {
+#     print(j)
+#     print(normCols[j])
+#     print(TH.cols[j])
+#     print(mean.dmso.colnames[j])
+#     
+#        ICAM.raw[[i]]$myDT[, normCols[j]:= (get(TH.cols[j]) - get(mean.dmso.colnames[j]) ) ] # norm cols as the values = DMSO averages 
+#   }
+# }
 
 TH.cols.mean <- paste("backgroundValue.",TH.cols ,sep = "") # column names for background values  
 mean1above <- paste( "mean1above", TH.cols, sep ="_")
@@ -311,18 +313,18 @@ gc()
 #remove redundent data to save some memory
 
 
-# count norm cols above and below thresholds. Theshold is determined from raw data of first two time points from DMSO dose <= 0.2
+# iqr
 
 for(i in seq_along(ICAM.raw)) {
  print(paste("i: ", i ))
 # a fancy way to use a mean of a subset and populate a list of columns with these means entirely (usually I would use a merge)
   ICAM.raw[[i]][["myDT"]][, get(
-    "TH.cols.mean"):= list(mean(get(TH.cols[1])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE), 
-                           mean(get(TH.cols[2])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE),
-                           mean(get(TH.cols[3])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE),
-                           mean(get(TH.cols[4])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE))]
+    "TH.cols.mean"):= list(IQR(get(TH.cols[1])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE), 
+                           IQR(get(TH.cols[2])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE),
+                           IQR(get(TH.cols[3])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE),
+                           IQR(get(TH.cols[4])[treatment %in% "DMSO" & dose_uM <= 0.2 & timeID %in% c(1,2)], na.rm = TRUE))]
 
-  for(j in seq_along(normCols)) { # dus aantal cellen die boven achtergrond uitsteken nadat achtergrond er al af is gehaald
+  for(j in seq_along(TH.cols)) { # dus aantal cellen die boven achtergrond uitsteken nadat achtergrond er al af is gehaald
     print(j) 
   # oud; normcol is 1 achtergrond waarde reeds afgehaald. dus -1 aan rechter kant gedaan
     ## nieuw: is cell int groter / kleiner dan DMSO per tijdpunt gem
@@ -337,8 +339,8 @@ for(i in seq_along(ICAM.raw)) {
 }
 
 
-rmCols <- c("meanDMSO_obj_icam1_Intensity_IntegratedIntensity_image_GFP","meanDMSO_obj_icam1_Intensity_MeanIntensity_image_GFP",
-            "meanDMSO_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP","meanDMSO_obj_cyto_only_Intensity_MeanIntensity_image_GFP")
+#rmCols <- c("meanDMSO_obj_icam1_Intensity_IntegratedIntensity_image_GFP","meanDMSO_obj_icam1_Intensity_MeanIntensity_image_GFP",
+ #           "meanDMSO_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP","meanDMSO_obj_cyto_only_Intensity_MeanIntensity_image_GFP")
 for(i in seq_along(ICAM.raw)) {
   print(paste("i: ", i ))
   for(j in seq_along(rmCols)){
@@ -367,7 +369,7 @@ all.icam.feats<-c("imageCountTracked", "obj_icam1_AreaShape_Area",
              "obj_cyto_only_Intensity_IntegratedIntensity_image_GFP","obj_cyto_only_Intensity_MeanIntensity_image_GFP",
              "obj_nuclei_AreaShape_Area","obj_nuclei_Intensity_MeanIntensity_image_hoechst",
              "obj_nuclei_TrackObjects_DistanceTraveled", 
-             normCols,
+             
              TH.cols.mean, mean1above, mean2above, mean3above, mean1below, mean2below, mean3below
              
 )
@@ -376,7 +378,7 @@ mean.data.ICAM1= list()
 
 all.icam.feats[ !all.icam.feats%in% colnames(ICAM.raw[[2]]$myDT)] # check if column names correct now
 
-#calculate mean, however what about NA values? no problem I think: mean(c(NA,NA,NA,1,0),na.rm=TRUE) = 0.5 (with regard to fraction GFP positive...)
+#calculate mean of TRUE/FALSE to get to fractions, however what about NA values? no problem I think: mean(c(NA,NA,NA,1,0),na.rm=TRUE) = 0.5 (with regard to fraction GFP positive...)
 for(i in seq_along(ICAM.raw)){
 print(i)
     mean.data.ICAM1[[i]] <-  ICAM.raw[[i]]$myDT[ , lapply(.SD, function(x) { mean(x, na.rm=TRUE) }),
@@ -393,6 +395,10 @@ ICAM1: save single cell data & and remove from memory
 
 ```{r save_singlecell_ICAM1}
 
+colnames(ICAM.raw[[1]]$myDT)
+plot(density(ICAM.raw[[1]]$myDT[ treatment == "DMSO" & cell_line == "ICAM1" & timeID != 1, as.numeric(mean1below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP)]))
+
+
 save( ICAM.raw, file = "../generated/ICAM.raw.Rdata")
 
 rm("ICAM.raw")
@@ -401,13 +407,16 @@ gc()
 save( mean.data.ICAM1, file = "../tmp/mean.data.ICAM1.Rdata") # save to revert in case of error
 mean.data.ICAM1
 colnames(mean.data.ICAM1)
+
+mean.data.ICAM1 <- do.call('rbind', mean.data.ICAM1)
+
 test <- mean.data.ICAM1[ , list(treatment, dose_uM, cell_line , plateID, timeID, mean2above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP, mean2below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP,
-                                meanDMSO_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP,
-backgroundValue.obj_cyto_only_Intensity_IntegratedIntensity_image_GFP) ]
+                                backgroundValue.obj_cyto_only_Intensity_IntegratedIntensity_image_GFP) ]
+
 
 
 test[ , test_2_fraction := mean2above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP - mean2below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP ]
-test <- test[ treatment == "dmso" & cell_line == "ICAM1"]
+test <- test[ treatment == "DMSO" & cell_line == "ICAM1"]
 ggplot( data = test , aes(x =timeID, y = test_2_fraction )) + geom_point(aes(color = plateID)) 
 
 mean2above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP
@@ -428,7 +437,7 @@ Clean ICAM1 summary data
 ```{r clean_ICAM1_summarydata }
 #rm(list=ls())
 #load("../tmp/mean.data.ICAM1.Rdata")
-mean.data.ICAM1 <- do.call('rbind', mean.data.ICAM1)
+#mean.data.ICAM1 <- do.call('rbind', mean.data.ICAM1)
 mean.data.ICAM1[, treatment := tolower(treatment)]
 #Carmustine 0.037 ipv 0.356
 
@@ -1504,11 +1513,34 @@ sort(unique(all.data[, fingerprints]))
 PI.data <- as.data.table(
   read.delim(file = '../data/summary data files cell death/cytotox Summary Data.txt', sep = '\t', header=TRUE)
 )
+PI.data[ PI.data$treatment == "cyclosporin A" ,]
+PI.data$treatment <- tolower(PI.data$treatment)
 
-PI.data[PI.data$treatment == "digoxin",]
+icam.files <- dir('../data/summary data files cell death/CD summary data ICAM1')
+icam.path <- '../data/summary data files cell death/CD summary data ICAM1'
+
+PI.data.icam = alist()
+for( i in seq_along(icam.files)){
+PI.data.icam[[i]] <- read.delim(file = paste(icam.path, icam.files[i], sep ="/"), sep = "\t")
+}
+
+PI.data.icam <- do.call('rbind', PI.data.icam)
+head(PI.data)
+head(PI.data.icam)
+PI.data.icam$treatment <- tolower(PI.data.icam$treatment)
+
+
+
+PI.data.icam <- as.data.table(PI.data.icam)
+unique(PI.data.icam[, variable])
+unique(PI.data.icam[ variable == "count_PI_obj_masked_primaryID_AreaShape_Area.DIV.Nuclei_obj_AreaShape_Area_larger_0.02", plateID])
+unique(PI.data.icam[, variable])
+PI.data.icam <-PI.data.icam[ variable == "count_PI_obj_masked_primaryID_AreaShape_Area.DIV.Nuclei_obj_AreaShape_Area_larger_0.02", ]
+PI.data.icam[, variable := "necrosis_pos_TNF"  ]
+
 
 unique(PI.data$variable)
-unique(PI.data[ , variable])
+
 PI.data <- PI.data[variable == "count_PI_obj_masked_primaryID_AreaShape_Area.DIV.Nuclei_obj_AreaShape_Area_larger_0.02_",]
 PI.data[, variable := "necrosis_pos"]
 PI.data$treatment <- tolower(PI.data$treatment)
@@ -1524,18 +1556,48 @@ for( i in seq_along(file.l)){
 PI.data_ncmax[[i]] <- read.delim(file = paste0(pncmax, file.l[i]), sep = "\t", header = TRUE)
 }
 
-PI.data_ncmax <- do.call('rbind', PI.data_ncmax)
-PI.data_ncmax <- as.data.table(PI.data_ncmax)
 
-PI.data_ncmax <- PI.data_ncmax[ variable == "count_PI_masked_primaryID_AreaShape_Area.DIV.Nuclei_AreaShape_Area_larger_0.02" ]
+
+PI.data_ncmax <- do.call('rbind', PI.data_ncmax)
+PI.data_ncmax$treatment <- tolower(PI.data_ncmax$treatment)
+PI.data_ncmax <- as.data.table(PI.data_ncmax)
+unique(PI.data_ncmax[ , variable])
+unique(PI.data_ncmax[plateID == "20150923_ICAM1" ,variable])
+
+PI.data_ncmax <- PI.data_ncmax[ variable %in% c("count_PI_masked_primaryID_AreaShape_Area.DIV.Nuclei_AreaShape_Area_larger_0.02", 
+                                "count_obj_final_PI_AreaShape_Area.DIV.obj_nuclei_AreaShape_Area_larger_0.02"), ]
+
+
+unique(PI.data_ncmax[, plateID])
+
 PI.data_ncmax[ , variable := 'necrosis_pos']
 PI.data_ncmax$treatment <- tolower(PI.data_ncmax$treatment)
+PI.data_ncmax[ grepl("ICAM1", plateID), variable := "necrosis_pos_TNF"]
 
-plot(density(PI.data_ncmax$value))
-lines(density(PI.data$value), col = 'red')
+PI.data_ncmax[, cell_line := "ICAM1"]
+PI.data.icam[, cell_line := "ICAM1"]
+PI.data.icam[ treatment == "dmso"]
+
+
+PI.data_ncmax
+PI.data
+PI.data.icam
+
+
+plot(density(PI.data$value), ylim = c(0,30))
+lines(density(PI.data.icam$value), col = 'red')
+
+length(PI.data.icam$value)
 
 PI.data[, cell_line := NULL]
-PI.data <- rbind(PI.data_ncmax, PI.data)
+PI.data.icam[, cell_line := NULL]
+PI.data.icam[, replID := NULL]
+PI.data_ncmax[, cell_line := NULL]
+PI.data <- rbind(PI.data_ncmax, PI.data, PI.data.icam)
+
+table(PI.data[, variable])
+
+sort(unique(PI.data$treatment))
 
 # add cmax values to PI.data
 
@@ -1632,6 +1694,7 @@ PI.data[ treatment == "tetracycline" , ]
 PI.data[is.na(cmax)] 
 
 PI.data <- PI.data[ cmax != "25cmax", ]
+unique(PI.data[, cmax])
 
 PI.data_mean <- PI.data[ , lapply(.SD, function(x) list( mean(x), sd(x)))[[1]],
                                                   by = list(treatment, cmax,dose_uM, variable),
@@ -1641,7 +1704,7 @@ setnames(PI.data_mean, old = c("variable", "V1", "V2"), new = c("fingerprints", 
 
 
 plot(density(PI.data_mean[  , necrosis_pos]))
-
+sort(unique(PI.data_mean$treatment))
 
 # calculate mean of values over time from time plate quality control data  
 
@@ -1712,6 +1775,8 @@ PI.data_mean[PI.data_mean$treatment == "digoxin",]
 load( file = "../tmp/model.results.t.mean.Rdata")
 load( file = "../tmp/plateQC_data_mean.Rdata")
 load( file = "../tmp/PI.data_mean.Rdata")
+
+PI.data_mean[ treatment == "cyclosporin a"]
 
 
 ```
@@ -1826,6 +1891,14 @@ mmn.list = list()
  mmn.df <- do.call("rbind", mmn.list)
  
  
+ 
+ # perform min max normalization ICAM1 data
+source('normFunICAM1.R')
+
+ICAMnorm <- normFunIcam(dataIn = all.data.norm, normVar = "obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1")
+
+all.data.norm <- rbind(all.data.norm, ICAMnorm)
+
  head(mmn.df)
  
  all.data.norm <- rbind(all.data, mmn.df)
@@ -1860,13 +1933,15 @@ GFP_dif.m2_ICAM1[, variable := NULL]
 
 
 fingerprints <- unique(all.data.norm[, fingerprints])
+all.data.norm[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP",]
 
 selfingerprints <- c("mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP",
-                     "mmn_Nuclei_Intensity_MeanIntensity_Image_GFP",
                      "mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP",
-                     "mmn_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP")
+                     "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1")
 
 selfingerprints <- c(selfingerprints, fingerprints[ grepl("2m", fingerprints)])
+
+
 
 
 # include counting feature for the reporters (2m or 3m)
@@ -1874,9 +1949,13 @@ selfingerprints <- c(selfingerprints, fingerprints[ grepl("2m", fingerprints)])
 ML_data <- all.data.norm[ fingerprints %in% selfingerprints, ]
 unique(ML_data[, fingerprints])
 
+
+
 GFP_dif.m2_ICAM1
 ML_data[ , variable := NULL]
 ML_data <- rbind(ML_data, GFP_dif.m2_ICAM1)
+unique(ML_data[ , list(fingerprints, cell_line)])
+
 
 # select feats from quality control data for ML
 unique(model.results.t.mean[ , fingerprints ])  # time course derived slopes, mean over plates
@@ -1970,7 +2049,7 @@ ML_data[ treatment == "dmso",]
 ML_data <- ML_data[ !grepl("_c$", treatment), ]
 ML_data <- ML_data[ treatment != "dmem", ]
 
-ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plateID)]
+ML_data[ , singleCurveName := paste(fingerprints,cell_line, treatment, cmax, replID, plateID)]
 
 ML_data[ ,.N , by = list(singleCurveName) ][N>40]
 
@@ -1985,11 +2064,13 @@ dmso_data <- dmso_data[ ,  mean(value), by = list(treatment, dose_uM, plateID, t
 setnames(dmso_data, old = "V1", new = "value")
 ML_data <- rbind(ML_data, dmso_data)
 
-ML_data[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, plateID, sep = "__")]
+ML_data[ , singleCurveName := paste(fingerprints, cell_line, treatment, cmax, replID, plateID, sep = "__")]
 ML_data[ ,.N , by = list(singleCurveName) ][N>40]
 
 all.singleCurveNames <- unique(ML_data[ , singleCurveName])
 save.image('../tmp/ML_data.Rdata')
+
+
 allml <- na.omit(ML_data)
 allml <- split( allml, allml$singleCurveName)
 
@@ -2005,7 +2086,7 @@ output <- lapply( allml, function(x) celloscillate(Frame = x$timeAfterExposure, 
 #dev.off()
 
 
-head(names(output))
+tail(names(output))
 names(output[[4]])
 # select: maxslope + maxvalue + slopeDomain + slopeDomain2 + timeToTH + maxValueTime + valueStart + valueEnd
 
@@ -2045,7 +2126,7 @@ length(unlist(valueStart)) == length(unlist(valueEnd))
 
 
 
-
+head(timedynamics_feats)
 timedynamics_feats <- data.frame(maxValueTime = unlist(maxValueTime),
                            maxSlope = unlist(maxslope),
                            slopeDomain = unlist(slopeDomain),
@@ -2054,24 +2135,38 @@ timedynamics_feats <- data.frame(maxValueTime = unlist(maxValueTime),
                            timeDomain = timeDomain,
                            maxMagnitudeValue = unlist(maxMagnitudeValue))
 #_#
-head(timedynamics_feats)
+tail(timedynamics_feats)
 
 
 lapply(timedynamics_feats, function(x) any(is.na(x)))
 
 sum(is.na(timedynamics_feats$slopeDomain)) # these are the missing start curves. 
 
+length(feature_names)
+
+unique(rownames(timedynamics_feats))
 
 feature_names <- unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 1 ))
-treatment_names <- unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 2 ))
-cmax_names <-  unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 3 ))
-rep_names <-  unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 4 ))
-
+cell_line_names <- unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 2 ))
+treatment_names <- unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 3 ))
+cmax_names <-  unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 4 ))
+rep_names <-  unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 5 ))
+unlist(lapply( strsplit(rownames(timedynamics_feats), "__"), "[[", 6 ))
 
 timedynamics_feats$feature_names <- feature_names
+timedynamics_feats$cell_line_names <- cell_line_names
 timedynamics_feats$treatment_names <- treatment_names
 timedynamics_feats$cmax_names <- cmax_names
 timedynamics_feats$rep_names <- rep_names
+ind1 <- which(grepl("Srxn1",timedynamics_feats$feature_names ))
+ind2 <- which(grepl("p21",timedynamics_feats$feature_names ))
+ind3 <- which(grepl("DDIT3",timedynamics_feats$feature_names ))
+ind4 <- which(grepl("ICAM1",timedynamics_feats$feature_names ))
+
+ind <- c(ind1, ind2, ind3, ind4)
+timedynamics_feats$feature_names[-ind] <- paste(timedynamics_feats$feature_names[-ind], timedynamics_feats$cell_line_names[-ind], sep ="_")
+unique(timedynamics_feats$feature_names)
+
 
 
 head(timedynamics_feats)
@@ -2100,8 +2195,8 @@ if(!dir.exists(writepdfs)){
 
 timedynamics_feats <- data.table(timedynamics_feats)
 
-
-timedynamics_feats_long <- melt(timedynamics_feats, id.vars = c('feature_names', 'treatment_names', 'cmax_names', 'rep_names'))
+lapply(timedynamics_feats, class)
+timedynamics_feats_long <- melt(timedynamics_feats, id.vars = c('feature_names', 'cell_line_names', 'treatment_names', 'cmax_names', 'rep_names'))
 timedynamics_feats_long[ , fingerprints := paste(feature_names, variable, sep = '_')]
 ML_td_fingerprints <- unique(timedynamics_feats_long[, fingerprints])
 
@@ -2121,13 +2216,8 @@ ML_td_fingerprints <- unique(timedynamics_feats_long[, fingerprints])
 
 ## TODO remove based on QC plots and remove based on QC values
 
-timedynamics_feats[, timeDomain:= NULL] 
-timedynamics_feats[ valueStart > 0.5, ] 
 
-timedynamics_feats[ is.na(slopeDomain), ] 
 
-timedynamics_feats_long <- melt(timedynamics_feats, id.vars = c('feature_names', 'treatment_names', 'cmax_names', 'rep_names'))
-timedynamics_feats_long[ , fingerprints := paste(feature_names, variable, sep = '_')]
 
 ```
 
@@ -2179,12 +2269,7 @@ unique(timedynamics_feats_long[, fingerprints])
 
 ```
 
-Considering time limitation of analysis, first attempt feature selection or some penalization classification method  
-Before adding solvability and daily dosage data, first determine performance without these  
-
-treating cmax values as observations: specificity and sensitivity can be determined based on different cmax, or based on one of cmax's being in the severe dili class  
-
-Combine data, annotate data, include solvability & daily dosage data  
+Combine data, annotate data
 ```{r }
 # combine data
 timedynamics_feats_long[ , observations := paste(treatment_names, cmax_names, sep ="_")]
@@ -2203,11 +2288,34 @@ setnames(ML_data_QC_mean, old = c('treatment', 'cmax', 'V1'), new = c('treatment
 
 ML_data_final_long <- rbind(timedynamics_feats_long_mean, ML_data_QC_mean)
 
+ML_data_final_long[ treatment_names == "dmso", cmax_names := "100cmax"]
+ML_data_final_long[ cmax_names == '0cmax',]
 # cmax as features too;
-ML_data_final_long <- ML_data_final_long[ cmax_names != '0cmax',]
+#ML_data_final_long <- ML_data_final_long[ cmax_names != '0cmax',]
+
+# replicate the DMSO over the 5 cmax values (there is effectively 1 dmso concentration)
+dmso_tmp <- ML_data_final_long[ treatment_names == "dmso"]
+
+dmso_tmp$cmax_names <- "1cmax"
+dmso_tmp1 <- dmso_tmp
+dmso_tmp$cmax_names <- "5cmax"
+dmso_tmp_5 <- dmso_tmp
+dmso_tmp$cmax_names <- "10cmax"
+dmso_tmp_10 <- dmso_tmp
+ dmso_tmp$cmax_names <- "50cmax"
+dmso_tmp_50 <- dmso_tmp
+
+ML_data_final_long <- rbind(ML_data_final_long, dmso_tmp1, dmso_tmp_5, dmso_tmp_10, dmso_tmp_50)
+unique(ML_data_final_long[treatment_names == "dmso", cmax_names])
 
 ML_data_final_long[ , fingerprints := paste( fingerprints, cmax_names, sep ="_" )]
-sort(unique(ML_data_final$treatment))
+
+
+sort(unique(ML_data_final_long$treatment_names))
+
+ML_data_final_long[ treatment_names ==  "cyclosporin a", value]
+
+
 ML_data_final <- dcast(data = ML_data_final_long, formula = treatment_names   ~ fingerprints, value.var = 'value' , fun = function(x) mean(x, na.rm=TRUE))
 sort(unique(ML_data_final_long$treatment))
 sort(unique(ML_data_final$treatment))
@@ -2218,10 +2326,17 @@ ind<- unique(which(is.na(ML_data_final), arr.ind = T)[,1])
 
 ML_data_final[ind, 1:5]
 
+inddd<- which(is.na(ML_data_final[ ML_data_final$treatment_names == "cyclosporin a",]))
+ML_data_final[ ML_data_final$treatment_names == "cyclosporin a",]
 
+colnames(ML_data_final)
 
+ML_data_final<-as.data.table(ML_data_final)
 dim(na.omit(ML_data_final))
 dim((ML_data_final))
+ML_data_final[, list(treatment_names, necrosis_pos_TNF_100cmax)]
+
+
 
 ML_data_final <- na.omit(ML_data_final)
 ML_data_final <- data.table(ML_data_final)
@@ -2247,7 +2362,7 @@ ML_data_final <- annotationData[ML_data_final]
 ML_data_final[1:5,1:11]
 ML_data_final[ treatment == "carbamazepine", 1:4]
 save(ML_data_final, file = "../tmp/ML_data_final.Rdata")
-
+colnames(ML_data_final)
 sort(unique(ML_data_final$treatment))
 
 
@@ -2447,11 +2562,15 @@ model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
 
 save(model.results.GFP_data.df, file = '../tmp/model.results.GFP_data.df.RData')
 
+
+
+
+
 ```
 
 ```{r annotate}
 #annotate again, after modeling
-
+# donderdag pauze, vrijdag verder
 sort(unique(model.results.GFP_data.df$treatment))
 dir('../metadata')
 anotData <- read.delim( file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt' , sep ="\t" , header = TRUE)
@@ -2516,6 +2635,10 @@ model.results.GFP_data.df.m[ , cmax := factor(cmax, levels =
 model.results.GFP_data.df.m[ , fingerprints := factor(fingerprints, levels =
  c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"  ))]
 
+
+
+
+
 (as.data.frame(model.results.GFP_data.df.m[ treatment == "digoxin", .N,by = list(cmax, fingerprints)]))
 
 all.treats <- sort(as.character(unique(model.results.GFP_data.df.m$treatment)))
@@ -2549,11 +2672,13 @@ length(81:length(all.treats))
 if( !(dir.exists('../generated/results/time_figure'))){
   dir.create('../generated/results/time_figure')
 }
+
+
 sel.comps <- sort(all.treats)[1:40]
 sel.comps <- sort(all.treats)[41:80]
 sel.comps <- sort(all.treats)[81:length(all.treats)]
 
-  pdf(file = "../generated/results/time_figure/time_fig 3 of 3 figure.pdf", height = 60, width = 10)
+  pdf(file = "../generated/results/time_figure/time_fig 1 of 3 figure.pdf", height = 60, width = 10)
   p<- ggplot(data= model.results.GFP_data.df.m[ treatment %in% sel.comps, ]  , aes(x = timeAfterExposure, y = meanR, color = fingerprints)) + facet_grid(  treatment ~ cmax) +
     geom_line( size = 2)  + scale_color_manual(values=myColors$fingerprint) +
     theme_bw() +
@@ -2636,9 +2761,11 @@ Classes:
 ```{r feature_selection_and_prediction}
 require(ISLR)
 require(leaps) # best subset selection
-load( file = "../tmp/ML_data_final.Rdata")
-ML_data_final[, 1:11]
 
+dim(ML_data_final)
+#load( file = "../tmp/ML_data_final.Rdata")
+ML_data_final[, 1:11]
+colnames(ML_data_final)
 sort(unique(ML_data_final$treatment))
 density(ML_data_final[, GFP_dif.m2_ICAM1_maxMagnitudeValue_100cmax])
 colnames(ML_data_final)
@@ -2646,9 +2773,10 @@ colnames(ML_data_final)
 
 unique(ML_data_final[ ,DILIConcern ])
 ML_data_final <- ML_data_final[ DILIConcern != "N/A",]
-
+table(ML_data_final[  ,EndDissolvedQuality  ])
 unique(ML_data_final[, Bob_anot])
 ML_data_final <- ML_data_final[ Bob_anot != "general_cytotox_reactive",  ]
+ML_data_final <- ML_data_final[  EndDissolvedQuality != "no",  ]
 
 ML_data_final_annot <-ML_data_final[,1:11]
 ML_data_final_data <- ML_data_final[,-(1:11)]
@@ -2657,6 +2785,7 @@ ML_data_final_annot[DILIConcern == "Most-DILI-Concern", diliClass := "severe"]
 ML_data_final_annot[DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
 
 dim(ML_data_final)
+ML_data_final_data[1:11, 1:11]
 
 
 
@@ -2718,82 +2847,87 @@ ML_data_final_data_long
 
 ML_data_final_data_long[!is.na(nonSevere) , value := nonSevere]
 ML_data_final_data_long[is.na(nonSevere) , value := severe]
-ML_data_final_data_long[ , normDiff := 
-                            (mean(severe, na.rm = TRUE) - mean(nonSevere, na.rm = TRUE)) / 
-                               sd(value) , by = variable ]
+
+ML_data_final_data_long[ !is.na(nonSevere), class := "nonSevere"]
+ML_data_final_data_long[ is.na(nonSevere), class := "severe"]
+pdf(file ="../generated/results/density_variables_class.pdf", height = 60, width = 100)
+ggplot(data = ML_data_final_data_long, aes(x=value, color = class)) + geom_density(aes(group = class)) + facet_wrap(~variable, scales = "free") +
+  theme_minimal()
+dev.off()
+# simple feature selection method. Followed by removing highly correlated features.
+head(ML_data_final_data_long)
+unique(ML_data_final_data_long$variable)
+
+#KS test to asses difference in distributions of variables between the two classes
+all.ks.feats <- unique(ML_data_final_data_long[, variable])
+
+results.ks = alist()
+for( i in seq_along(all.ks.feats)){
+results.ks[[i]] <- ks.test(x = ML_data_final_data_long[ variable == all.ks.feats[i] & class == "nonSevere" , value ],
+                           y = ML_data_final_data_long[ variable == all.ks.feats[i] & class == "severe" , value ],
+                           alternative = "two.sided", exact = FALSE)
+  
+}
+names(results.ks[[1]])
 
 
-length(unique(ML_data_final_data_long$variable)) #a 235 features.  
-length(unique(ML_data_final_data_long$treatment)) #a 124 treatments 
-
-featu_select <- ML_data_final_data_long[ , mean(normDiff), by = variable]
-
-#max of 13 features to avoid overfitting
 
 
-quantile(abs(featu_select$V1), prob = 0.8)
+ks_results <- data.table(data.frame(feature = all.ks.feats, 
+                                    statistic = sapply(results.ks, "[[", "statistic"),
+                                    p.value = sapply(results.ks, "[[", "p.value")))
+write.table(ks_results, file = "../generated/results/feat_sel_ks_results.txt", sep = "\t", col.names = NA)
+ks_results <- ks_results[ order(ks_results$p.value), ]
+sign_ks_results <- ks_results[ p.value <= 0.05, ]
 
-selPar <- quantile(abs(featu_select$V1), prob = 0.8)
 
-sel_feats<-featu_select[abs(V1) > selPar] # 47 feats
-write.table(file = "../generated/results/selectedFeats.txt", sel_feats, sep ="\t")
 
-ind <- colnames(ML_data_final_data) %in% sel_feats$variable
+ind <- colnames(ML_data_final_data) %in% sign_ks_results$feature
 sel_data <- ML_data_final_data[ , ind, with = FALSE]
+sel_data <- sel_data[, ncol(sel_data) : 1]
+
+dim(sel_data)
 write.table(cor(sel_data), file = "../generated/results/selFeatsCormatrix.txt", sep ="\t")
 # per cell line select least correlated features
 cor_data <- cor(sel_data)
-rownames(cor_data)
+head(cor_data)
 
+library('caret')
+df2 = cor(sel_data)
 
-#nonGFP
-nonGFP <- cor_data[, grepl("Speed", colnames(cor_data) )  | grepl("necrosis", colnames(cor_data) ) | grepl("Hoechst", colnames(cor_data) )  ]
-nonGFP <- nonGFP[ grepl("Speed", rownames(nonGFP) )  | grepl("necrosis", rownames(nonGFP) ) | grepl("Hoechst", rownames(nonGFP) ),  ]
+sel_data 
 
-# ICAM1
-icam1 <- cor_data[, grepl("ICAM1", colnames(cor_data) )]
-icam1 <- icam1[ grepl("ICAM1", rownames(icam1) ), ]
+hc = findCorrelation(abs(df2), cutoff=0.7) # putt any value as a "cutoff" 
+hc = sort(hc)
+reduced_Data = sel_data[,-c(hc), with = FALSE]
+print(reduced_Data)
+dim(reduced_Data)
+colnames(reduced_Data)
 
-#DDIT3
-ddit3 <- cor_data[, grepl("DDIT3", colnames(cor_data) )]
-ddit3 <- ddit3[ grepl("DDIT3", rownames(ddit3) ), ]
-write.table(ddit3, file = "../generated/results/ddit3Cormatrix.txt", sep ="\t")
-# Srxn1
-srxn1 <- cor_data[, grepl("Srxn1", colnames(cor_data) )]
-srxn1 <- srxn1[ grepl("Srxn1", rownames(srxn1) ), ]
-write.table(srxn1, file = "../generated/results/srxn1Cormatrix.txt", sep ="\t")
+write.table(reduced_Data, file = "../generated/results/reduced_sel_features.txt", sep ="\t")
+write.table(cor(reduced_Data), file = "../generated/results/corr_reduced_sel_features.txt", sep ="\t")
+sel_data <- reduced_Data
+dim(sel_data)
+colnames(sel_data)
+selFeats <- colnames(sel_data)
 
-
-# remove biologically correlated features
-
-# there were no p21 predictors
-
-selFeats <- c("necrosis_pos_100cmax",
-              "slope_CellSpeed_100cmax",
-              "slope_Nuclei_Intensity_MeanIntensity_Image_Hoechst_100cmax",
-              
-  
-              "GFP_dif.m2_ICAM1_maxSlope_100cmax",
-              "GFP_dif.m2_ICAM1_maxSlope_50cmax",
-              
-              "GFP_pos.2m_DDIT3_maxMagnitudeValue_100cmax",
-              "GFP_pos.2m_DDIT3_maxSlope_10cmax",
-              
-              "GFP_pos.2m_Srxn1_maxMagnitudeValue_100cmax",
-              "GFP_pos.2m_Srxn1_maxMagnitudeValue_1cmax",
-              "GFP_pos.2m_Srxn1_maxSlope_50cmax", 
-              "GFP_pos.2m_Srxn1_slopeDomain_5cmax"
-  )
-
+cor(sel_data)
 
 ``` 
 
-glm
 
-```{r ML}
-require(glmulti)
+
+
+# SVM classifier
+```{r }
+
+require(gbm)
+require(MASS)
+require(caret)
+
 
 indKeep <-  colnames(ML_data_final_data) %in% selFeats
+sum(indKeep)
 
 ML_data_final_data[, diliClass := ML_data_final_annot$diliClass ]
 ML_data_final_data[, diliClass := factor(diliClass) ]
@@ -2802,70 +2936,6 @@ ML_data_final_data_sel <- ML_data_final_data[, indKeep, with = FALSE]
 ML_data_final_data_sel$diliClass <- ML_data_final_annot$diliClass
 dim(ML_data_final_data_sel)
 ML_data_final_data_sel$diliClass <- factor(ML_data_final_data_sel$diliClass, levels =c("severe","nonSevere"))
-nobs <- nrow(ML_data_final_data_sel)
-
-outputConfT = alist()
-
-for( i in 1: 20) {
-
-    train=sample(seq(nobs),round(nobs/1.5, digits=0),replace=FALSE)
-
-  glmulti.logistic.out <-
-    glmulti(diliClass ~ ., data = ML_data_final_data_sel[train,],
-            level = 1,               # No interaction considered
-            maxsize = 11,
-            method = "g",
-            crit = "aic",            # AIC as criteria
-            confsetsize = 5,         # Keep 5 best models
-            plotty = F, report = F,  # No plot or interim reports
-            fitfunction = "glm",     # glm function
-            family = binomial)       # binomial family for logistic regression
-
-
-## Show 5 best models (Use @ instead of $ for an S4 object)
-# glmulti.logistic.out@formulas
-
-summary(glmulti.logistic.out@objects[[1]])
-
-tabl(dML_data_final_data_sel$diliClass)
-
-acc = alist()
-sens = alist()
-spec = alist()
-probs <- seq(0,1, length.out = 11)
-
-for( j in seq_along(probs)) {
-
-  predictt <- predict(glmulti.logistic.out@objects[[1]], newdata = ML_data_final_data_sel[-train,], type = 'response' ) >= probs[j]
-
-predict_lab <- replace(predictt, predictt, "nonSevere" )
-predict_lab <- replace(predict_lab, predict_lab == "FALSE", "severe" )
-predict_lab <- factor(predict_lab, levels = c("severe", "nonSevere"))
-
-conft<- table(data.frame( data = ML_data_final_data_sel$diliClass[-train],predict = predict_lab))
-
-acc[[j]] <- sum(diag(conft)) / sum(conft)
-sens[[j]] <- conft[1,1] / sum(conft[1,])
-spec[[j]] <- conft[2,2] / sum(conft[2,])
-
-}
-
-outputConfT[[i]] <-  data.frame(run = i, prob = probs, acc = unlist(acc), sens = unlist(sens), spec = unlist(spec))
-
-  }
- 
-  write.table( do.call('rbind' , outputConfT), file = "../generated/results/glmulti_20runs_ROCprobs.txt", sep ="\t", col.names = NA)
-
-```
-
-remark; noticed I am only missing digoxin from the data at this point. cannot explain why yet (26-4-2017)
-
-random forrest + importance plot
-```{r }
-
-require(gbm)
-require(MASS)
-require(caret)
 
 fitControl <- trainControl(method = "repeatedcv",
                            number = 10,
@@ -2883,115 +2953,156 @@ table(ML_data_final_data_sel$diliClass)
 
 ML_data_final_data_sel$diliClass <- factor(ML_data_final_data_sel$diliClass, levels = c("severe", "nonSevere"))
 
+getModelInfo("svmRadial" )
+resultTest = alist()
 
-svmFit <- train( diliClass~ ., data = ML_data_final_data_sel, 
-                 method = "svmRadial", degree = 3, #svmRadial
-                 trControl = fitControl, 
-                 preProc = "keep",
-                 tuneLength = 8,
-                 metric = "ROC")
+for( i in 1:50){
+trainInd <- sample(1:nrow(ML_data_final_data_sel), 80)
 
 
-svmFit <- train( diliClass~ ., data = ML_data_final_data_sel, 
-                 method = "svmRadial", degree = 2, 
+svmFit <- train( diliClass~ ., data = ML_data_final_data_sel[trainInd,], 
+                 method = "svmRadial", degree = 3, 
                  trControl = fitControl, 
                  preProc = c("center", "scale"),
-                 tuneLength = 8,
-                 metric = "ROC")
+                 tuneLength = 12,
+                 metric = "ROC"
+                 )
 
-library(e1071)
-ML_data_final_data
 
-# e1071 test
-outputConfT = alist()
-for(i in 1:50) {
-train <- sample(1:nrow(ML_data_final_data_sel), 82, replace = FALSE)
-
-table(ML_data_final_data_sel$diliClass[train])
-table(ML_data_final_data_sel$diliClass[-train])
-
-svmfit=svm(diliClass~.,data=ML_data_final_data_sel[train,],kernel="radial", cost=10,scale=FALSE)
-
-sum(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] ) == ML_data_final_data_sel$diliClass[-train])/ length(ML_data_final_data_sel$diliClass[-train])
-
-table(data.frame(predict = as.character(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] )), data = as.character(ML_data_final_data_sel$diliClass[-train])))
-
-conft<- table(data.frame(predict = as.character(predict(svmfit, newdata = ML_data_final_data_sel[-train, ] )), data = as.character(ML_data_final_data_sel$diliClass[-train])))
-
-acc <- sum(diag(conft)) / sum(conft)
-sens <- conft[2,2] / sum(conft[, 2])
-spec <- conft[1,1] / sum(conft[,1])
-
-outputConfT[[i]] <-  data.frame(run = i,  acc = unlist(acc), sens = unlist(sens), spec = unlist(spec))
+print(sum(predict(svmFit, newdata = ML_data_final_data_sel[-trainInd, ] ) == ML_data_final_data_sel$diliClass[-trainInd])/ length(ML_data_final_data_sel$diliClass[-trainInd]))
+resultTest[[i]] <- sum(predict(svmFit, newdata = ML_data_final_data_sel[-trainInd, ] ) == ML_data_final_data_sel$diliClass[-trainInd])/ length(ML_data_final_data_sel$diliClass[-trainInd])
 }
 
-e1071svm_radial3 <- do.call('rbind' , outputConfT)
-colMeans(e1071svm_radial3)
-write.table(e1071svm_radial3,file = "../generated/results/e1071svm_radial3.txt", sep = "\t", col.names = NA)
+mean(unlist(resultTest))
 
-# tree methods
-varImp = alist()
-outputConfT = alist()
-for( i in 1:50) {
-# 56 and 68
-
-train1 <- which(ML_data_final_data_sel$diliClass == "severe")
-train2 <-  which(ML_data_final_data_sel$diliClass == "nonSevere")
-
-train1 <- sample(train1, round(length(train1)/1.5, digits = 0), replace = FALSE)
-train2 <- sample(train2,round(length(train2)/1.5, digits = 0), replace = FALSE)
-
-train <- c(train1, train2)
-
-table(ML_data_final_data_sel[train, diliClass])
-table(ML_data_final_data_sel[-train, diliClass])
-
-boost.out=gbm(diliClass~.,data= ML_data_final_data_sel[train,],distribution="multinomial",n.trees=50000,shrinkage=0.005,interaction.depth=1)
-
-varImp[[i]] <- summary.gbm(boost.out)
-
-summary(boost.out)
-dim(ML_data_final_data_sel)
-predmat=predict(boost.out,newdata=ML_data_final_data_sel[-train, -12],n.trees=50000, type = "response")
+sum(predict(svmFit, newdata = ML_data_final_data_sel ) == ML_data_final_data_sel$diliClass)/ length(ML_data_final_data_sel$diliClass)
 
 
-
-dim(predmat)
-head(predmat[,, ])
-
-predmat <- predmat[,,1]
-
-p.predmat <- apply(predmat, 1, which.max)
-
-# total accuracy
-c('severe', 'nonSevere')[c(1,1,1,1,2,1)]
-predictedClasses <- c('severe', 'nonSevere')[p.predmat] 
-
-predictedClasses <- factor(predictedClasses, levels = c("severe", "nonSevere"))
-
-
-conft<- table(data.frame(predict = predictedClasses , data = ML_data_final_data_sel$diliClass[-train]))
-
-acc <- sum(diag(conft)) / sum(conft)
-sens <- conft[1,1] / sum(conft[, 1])
-spec <- conft[2,2] / sum(conft[,2])
-
-outputConfT[[i]] <-  data.frame(run = i,  acc = unlist(acc), sens = unlist(sens), spec = unlist(spec))
-}
-
-colMeans(do.call('rbind' ,outputConfT))
-
-outputConfT
-
-write.table(do.call('cbind',varImp),file = "../generated/results/varImp-boostingtree.txt", sep = "\t", col.names=NA)
-write.table(do.call('rbind' ,outputConfT), file = "../generated/results/boostingtree.txt", sep = "\t", col.names=NA)
-
-
-colMeans(do.call('rbind' ,outputConfT))
 
 ```
 
 
+
+
+```{r heatmap_sel_features_prediction}
+ML_data_final_data_sel
+# annotate DILI class and reporter type / cytotox
+
+annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
+
+annotationData <- data.table(annotationData)
+setnames(annotationData, old = "cmax", new = "cmaxDose")
+
+ML_data_final_data_sel$treatment <- ML_data_final_annot$treatment
+setkey(ML_data_final_data_sel, 'treatment')  
+setkey(annotationData, 'treatment')
+hm_data_metadata <- annotationData[ML_data_final_data_sel]
+dim(hm_data_metadata)
+hm_data_data <- hm_data_metadata[, -c(1:11,ncol(hm_data_metadata)), with = FALSE]
+hm_data_metadata <- hm_data_metadata[, c(1:11,ncol(hm_data_metadata)), with = FALSE]
+require(RColorBrewer)
+
+diliClass <-  c(brewer.pal(9,"YlOrRd")[c(1,6)])
+DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1, 2, 3,6)])
+
+names(DILIConcern) <- c("No-DILI-Concern", "Ambiguous DILI-concern", "Less-DILI-Concern", "Most-DILI-Concern")
+names(diliClass) <- c("nonSevere", "severe")
+
+myColors <- list(DILIConcern = DILIConcern, diliClass = diliClass ) 
+
+
+myColors$type <- c("light blue", "light green", "#CC6633", "purple", "black")
+names(myColors$type) <- c("Srxn1", "Chop", "p21", "Icam1", "tox")
+hist(1:100, col =myColors$reporter)
+
+hm_data_metadata$diliClass <- factor(hm_data_max$diliClass, levels =c("severe", "nonSevere"))
+treatmentAnot<-data.frame(DILIConcern = hm_data_metadata$DILIConcern, diliClass = hm_data_metadata$diliClass)
+
+
+
+# annotate columns, 
+
+ind_srxn1<- which(grepl("Srxn1", colnames(hm_data_data)))
+ind_p21<- which(grepl("p21", colnames(hm_data_data)))
+ind_DDIT3<- which(grepl("DDIT3", colnames(hm_data_data)))
+ind_ICAM1<- which(grepl("ICAM1", colnames(hm_data_data)))
+
+ind_tox<- c(1:ncol(hm_data_data))[-c(ind_srxn1, ind_p21, ind_DDIT3, ind_ICAM1)]
+
+reporter_anot <- data.frame(type = rep(NA, ncol(hm_data_data)))
+reporter_anot$type[ind_srxn1] <- "Srxn1"
+reporter_anot$type[ind_p21] <- "p21"
+reporter_anot$type[ind_DDIT3] <- "Chop"
+reporter_anot$type[ind_ICAM1] <- "Icam1"
+reporter_anot$type[ind_tox] <- "tox"
+
+annCol <- list(type =
+  reporter_anot$type
+    )
+
+colBreaks <- seq(min(scale(hm_data_data))-2, max(scale(hm_data_data)), length.out = 50)
+
+#colBreaks <-c(  -seq(1.01, 0.411, length.out = 8), -seq( 0.4, 0.01, length.out=16)  , 
+#                c(seq(0.01, 0.4,length.out=16), seq(0.411,1.01, length.out = 8)) )
+
+my.colors <- c(rev(brewer.pal(9, "YlGnBu")) , brewer.pal(9, "YlOrRd"))
+
+#my.colors <-  brewer.pal(9, "YlOrRd")
+
+
+pie(rep(1, length(my.colors)), labels = sprintf("%d (%s)", seq_along(my.colors), 
+                                                my.colors), col = my.colors)
+
+
+library(dendextend)
+hm_data_data <- as.data.frame(hm_data_data)
+rownames(hm_data_data) <- hm_data_metadata$treatment
+dist_hm_data <- dist(scale(hm_data_data), method = c("euclidean", "maximum", "manhattan", "canberra", "binary" , "minkowski")[3])
+
+clust_hm_data<-hclust(dist_hm_data, method = c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median","centroid")[1])
+dd <- as.dendrogram(clust_hm_data)
+#dd.reorder <- reorder(dd, wts =  c(150, 125:2))
+
+#cutree(dd.reorder,h=7) # it now works on a dendrogram#
+# It is like using:
+#dend1 <-dendextend:::cutree.dendrogram(dd.reorder,h=7)
+
+dend1 <- color_branches(dd, k = 4)
+dend1 <- color_labels(dend1, k = 4)
+plot(dend1)
+
+pdf("../generated/results/heatmap/rowClusterDendogram_manh_wardD_k4.pdf", width = 24, height = 10)
+plot(dend1)
+dev.off()
+
+
+hm_data_rowOrder <- labels(dend1)
+
+indOrder <- match( hm_data_rowOrder, rownames(hm_data_data))
+
+# cluster columns
+dist_hm_data2 <- dist(t(scale(hm_data_data)), method = c("euclidean", "maximum", "manhattan", "canberra", "binary" , "minkowski")[3])
+clust_hm_data2<-hclust(dist_hm_data2, method = c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median","centroid")[1])
+
+hm_data_colOrder <- labels(clust_hm_data2)
+
+colIndex <- match( hm_data_colOrder, colnames(hm_data_data))
+
+
+head(hm_data_data)
+pdf("../generated/results/heatmap/heatmap_manh_wardD.pdf", width= 12, height = 18)
+aheatmap(hm_data_data[ indOrder ,colIndex], Rowv = NA, Colv=NA, scale = "column",
+         color = my.colors, breaks = colBreaks,
+         fontsize = 10, width = 10, height=10, legend = TRUE,
+         annRow = treatmentAnot[indOrder, , drop = F] , annCol = as.data.frame(annCol)[colIndex,, drop = FALSE], annColors = myColors   #,txt =hm_data_data[ indOrder ,colIndex]
+)
+
+dev.off()
+
+
+
+
+```
 
 
 
@@ -3011,11 +3122,18 @@ all.data.norm[, variable:=NULL]
 all.data.norm[ treatment == "acarbose" & cell_line == "ICAM1", ]
 
 
+all.data.norm <- all.data.norm[ fingerprints != "GFP_dif.m1_ICAM1", ]
+all.data.norm <- all.data.norm[ fingerprints != "GFP_dif.m2_ICAM1", ]
+all.data.norm <- all.data.norm[ fingerprints != "GFP_dif.m3_ICAM1", ]
+
+
+unique(all.data.norm[, fingerprints])
 mean1above <- all.data.norm[ fingerprints %in% "mean1above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
 mean1bellow <- all.data.norm[ fingerprints %in% "mean1below_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
 
 all(mean1above[, timeID] == mean1bellow[, timeID])
 GFP_dif.m1_ICAM1 <- cbind( mean1above, mean1bellow[, value])
+
 GFP_dif.m1_ICAM1[, GFP_dif.m1_ICAM1 := value - V2 ]
 summary(GFP_dif.m1_ICAM1$GFP_dif.m1_ICAM1)
 GFP_dif.m1_ICAM1$fingerprints <- "GFP_dif.m1_ICAM1"
@@ -3023,7 +3141,10 @@ GFP_dif.m1_ICAM1[, V2:=NULL]
 GFP_dif.m1_ICAM1[, value:=NULL]
 
 setnames(GFP_dif.m1_ICAM1, "GFP_dif.m1_ICAM1", "value")
+
 all.data.norm <- rbind( all.data.norm, GFP_dif.m1_ICAM1 )
+
+plot(density(all.data.norm[ fingerprints == "GFP_dif.m1_ICAM1" & treatment == "dmso", value]))
 
 # for mean 2
 mean2above <- all.data.norm[ fingerprints %in% "mean2above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
@@ -3040,6 +3161,7 @@ GFP_dif.m2_ICAM1[, value:=NULL]
 setnames(GFP_dif.m2_ICAM1, "GFP_dif.m2_ICAM1", "value")
 all.data.norm <- rbind( all.data.norm, GFP_dif.m2_ICAM1 )
 
+plot(density(all.data.norm[ fingerprints == "GFP_dif.m2_ICAM1" & treatment == "dmso", value]))
 # for mean3
 
 mean3above <- all.data.norm[ fingerprints %in% "mean3above_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"]
@@ -3055,10 +3177,14 @@ GFP_dif.m3_ICAM1[, value:=NULL]
 
 setnames(GFP_dif.m3_ICAM1, "GFP_dif.m3_ICAM1", "value")
 all.data.norm <- rbind( all.data.norm, GFP_dif.m3_ICAM1 )
+plot(density(all.data.norm[ fingerprints == "GFP_dif.m3_ICAM1" & treatment == "dmso", value]))
+
+
+
 all.data.norm[cell_line == "ICAM1"]
 source('normFunICAM1.R')
 source('normFunICAM1_noDMSO_sub.R')
-
+all.data.norm <- all.data.norm[ fingerprints != "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1",]
 
 ICAMnorm <- normFunIcam(dataIn = all.data.norm, normVar = "obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1")
 
@@ -3068,10 +3194,85 @@ all.data.norm <- rbind(all.data.norm, ICAMnorm)
 all.data.norm <- rbind(all.data.norm, ICAMnormNoDMSOSub)
 
 save(all.data.norm, file = '../tmp/all.data.norm.Rdata')
-
+load('../tmp/all.data.norm.Rdata')
 unique(all.data.norm[ , fingerprints])
 
+# normalize ICAM1 to DMSO, by subtracting median dmso value from all ICAM1 values
 
+ICAM1_dmso <- all.data.norm[ fingerprints == "GFP_dif.m2_ICAM1" & treatment == "dmso",
+                           mean(value, na.rm=TRUE), by = list(timeAfterExposure) ]
+
+setnames(ICAM1_dmso, old = 'V1', new = 'ICAM1_dmso')
+setkey(ICAM1_dmso, 'timeAfterExposure')
+setkey(all.data.norm, 'timeAfterExposure')
+all.data.norm<- ICAM1_dmso[ all.data.norm]
+
+
+all.data.norm[ fingerprints == "GFP_dif.m2_ICAM1",
+                           value := value - ICAM1_dmso ]
+
+
+all.data.norm[, ICAM1_dmso:= NULL]
+
+plot(density(all.data.norm[ fingerprints == "GFP_dif.m2_ICAM1" & treatment == "dmso", value]))
+
+##==
+
+ICAM1_dmso <- all.data.norm[ fingerprints == "GFP_dif.m1_ICAM1" & treatment == "dmso",
+                            mean(value, na.rm=TRUE), by = list(timeAfterExposure) ]
+
+setnames(ICAM1_dmso, old = 'V1', new = 'ICAM1_dmso')
+setkey(ICAM1_dmso, 'timeAfterExposure')
+setkey(all.data.norm, 'timeAfterExposure')
+all.data.norm<- ICAM1_dmso[ all.data.norm]
+
+all.data.norm[ fingerprints == "GFP_dif.m1_ICAM1",
+                           value := value - ICAM1_dmso ]
+
+all.data.norm[, ICAM1_dmso:= NULL]
+plot(density(all.data.norm[ fingerprints == "GFP_dif.m1_ICAM1" & treatment == "dmso", value]))
+
+##==
+
+ICAM1_dmso <- all.data.norm[ fingerprints == "GFP_dif.m3_ICAM1" & treatment == "dmso",
+                            mean(value, na.rm=TRUE), by = list(timeAfterExposure) ]
+
+setnames(ICAM1_dmso, old = 'V1', new = 'ICAM1_dmso')
+setkey(ICAM1_dmso, 'timeAfterExposure')
+setkey(all.data.norm, 'timeAfterExposure')
+all.data.norm<- ICAM1_dmso[ all.data.norm]
+
+all.data.norm[ fingerprints == "GFP_dif.m3_ICAM1",
+                           value := value - ICAM1_dmso ]
+all.data.norm[, ICAM1_dmso:= NULL]
+plot(density(all.data.norm[ fingerprints == "GFP_dif.m3_ICAM1" & treatment == "dmso", value]))
+##==
+
+plot(density(all.data.norm[ fingerprints == "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1" & treatment == "dmso", value]))
+
+unique(all.data.norm[ , fingerprints])
+ICAM1_dmso <- all.data.norm[ fingerprints == "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1" & treatment == "dmso",
+                            mean(value, na.rm=TRUE), by = list(timeAfterExposure) ]
+
+
+setnames(ICAM1_dmso, old = 'V1', new = 'ICAM1_dmso')
+setkey(ICAM1_dmso, 'timeAfterExposure')
+setkey(all.data.norm, 'timeAfterExposure')
+all.data.norm<- ICAM1_dmso[ all.data.norm]
+
+all.data.norm[ fingerprints == "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1",
+                           value := value - ICAM1_dmso ]
+all.data.norm[, ICAM1_dmso:= NULL]
+##==
+
+
+unique(all.data.norm[, fingerprints])
+
+all.data.norm[ grepl("mmnDMSO.sub", fingerprints),fingerprints:= paste(fingerprints , cell_line, sep = "_")]
+
+all.data.norm[ ,fingerprints := gsub("mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1_ICAM1",
+                      "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1",
+                      fingerprints)]
 
 hm_feats <- c("mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", "GFP_pos.m3sd_Srxn1", "GFP_pos.3m_Srxn1", "GFP_pos.2m_Srxn1", 
               "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "GFP_pos.m3sd_DDIT3", "GFP_pos.3m_DDIT3", "GFP_pos.2m_DDIT3",
@@ -3084,9 +3285,6 @@ unique(hm_data[, fingerprints])
 
 # change names to more suitable for publication. 
 
-
-
-
 hm_data[ fingerprints == "mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", fingerprints := "Int_Srxn1" ]
 hm_data[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", fingerprints := "Int_Chop" ]
 hm_data[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21", fingerprints := "Int_p21" ]
@@ -3098,12 +3296,16 @@ unique(hm_data[, fingerprints])
 # calculate max of each time curve
 
 hm_data[ , .N, by = list(treatment, plateID, cmax, fingerprints, replID, dose_uM)]
-#????
 
+
+
+icamFun2 <- function(x) {
+  ifelse(abs(max(x, na.rm=T)) >= abs(min(x,na.rm=T)), max(x,na.rm=T), min(x,na.rm=T))
+}
 
 hm_data_max <- hm_data[ , icamFun2(value), by = list(treatment, plateID, cmax, fingerprints, replID, dose_uM)]
 
-hm_data_max <- hm_data_max[ , mean(V1), by = list(treatment, cmax, fingerprints)]
+hm_data_max <- hm_data_max[ , mean(V1, na.rm= TRUE), by = list(treatment, cmax, fingerprints)]
 setnames(hm_data_max, old = "V1", new = "value")
 
 
@@ -3118,7 +3320,7 @@ setkey(hm_data_max, 'treatment')
 setkey(annotationData, 'treatment')
 hm_data_max <- annotationData[hm_data_max]
 sort(unique(hm_data_max$treatment))
-save(file = '../tmp/hm_data_max_.Rdata', data = hm_data_max) # 11-1-2017 16.33
+save(file = '../tmp/hm_data_max_.Rdata', data = hm_data_max) 
 
 summary(hm_data_max[, value])
 
@@ -3148,7 +3350,7 @@ hm_data_max[ , fingerprints:= paste(fingerprints, cmax, sep = "_")]
 
 # need a fix for DMSO
 colnames(hm_data_max)
-hm_data_max_w <- dcast(hm_data_max, treatment + Bob_anot + DILIConcern  ~ fingerprints  , value.var = "value" )
+hm_data_max_w <- dcast(hm_data_max, treatment + Bob_anot + EndDissolvedQuality + DILIConcern  ~ fingerprints  , value.var = "value" )
 
 
 
@@ -3168,6 +3370,8 @@ hm_data_max_w[ ,DILIConcern := factor(DILIConcern)]
 colnames(hm_data_max_w)[1:10]
 unique(hm_data_max_w)
 hm_data_max_w <- hm_data_max_w[Bob_anot != "general_cytotox_reactive", ]
+hm_data_max_w <- hm_data_max_w[EndDissolvedQuality != "no", ]
+
 sort(unique(hm_data_max_w$treatment))
 hm_data_max_w[ DILIConcern == "Most-DILI-Concern", diliClass := "severe"]
 hm_data_max_w[ DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
@@ -3176,10 +3380,49 @@ hm_data_treatments <- hm_data_max_w$treatment
 hm_data_DILIConcern <- hm_data_max_w$DILIConcern
 head(hm_data_data)
 colnames(hm_data_max_w)
-hm_data_data <- as.matrix(hm_data_max_w[, -c(1:3,84)] )
+dim(hm_data_max_w)
+hm_data_data <- as.matrix(hm_data_max_w[, -c(1:4,85)] )
 
 rownames(hm_data_data) <- hm_data_treatments
 hm_data_max_w[,1:5,1:3]
+dim(hm_data_max_w)
+# add TNF cell death
+unique(ML_data_final_data_long$treatment)
+
+ind_necrosis <- which(grepl("necrosis", ML_data_final_data_long$variable))
+ind_slope_CellNumber <- which(grepl("CellNumber", ML_data_final_data_long$variable))
+
+
+CD_TNF <- ML_data_final_data_long[c(ind_necrosis, ind_slope_CellNumber),  ]
+CD_TNF <- dcast( data = CD_TNF, formula = treatment ~ variable, value.var = "value" )
+sum(is.na(CD_TNF))
+# normalize the slope columns between -1 and 1
+indSlope <- which(grepl("slope", colnames(CD_TNF)))
+
+for(i in seq_along(indSlope)){
+  minV <- min(CD_TNF[, indSlope[i]])
+  maxV <- max(CD_TNF[, indSlope[i]])
+  CD_TNF[, indSlope[i]] <- 2*((CD_TNF[, indSlope[i]] - minV) / (maxV - minV)) - 1
+}
+
+# normalize cell death to dmso
+
+head(CD_TNF)
+CD_TNF[ CD_TNF$treatment == "dmso",]
+
+indCD <- which(grepl("necrosis", colnames(CD_TNF)))
+
+for(i in seq_along(indCD)){
+  dmsoV <- CD_TNF[CD_TNF$treatment == "dmso", indCD[i]]
+  CD_TNF[, indCD[i]] <- CD_TNF[, indCD[i]] - dmsoV
+}
+
+
+
+hm_data_max_w <- merge(hm_data_max_w, CD_TNF, by = "treatment", all.x = TRUE, all.y = FALSE)
+colnames(hm_data_max_w)
+
+
 
 # color annotations
 require(RColorBrewer)
@@ -3196,8 +3439,8 @@ myColors <- list(DILIConcern = DILIConcern, diliClass = diliClass )
 myColors$cmax <- brewer.pal(5, "BuGn" )
 names(myColors$cmax) <- c("cmax1", "cmax5","cmax10", "cmax50", "cmax100")
 
-myColors$reporter <- c("light blue", "light green", "#CC6633", "purple")
-names(myColors$reporter) <- c("Srxn1", "Chop", "p21", "Icam1")
+myColors$reporter <- c("light blue", "light green", "#CC6633", "purple", "black")
+names(myColors$reporter) <- c("Srxn1", "Chop", "p21", "Icam1", "Tox")
 hm_data_max_w$diliClass <- factor(hm_data_max_w$diliClass, levels =c("severe", "nonSevere"))
 treatmentAnot<-data.frame(DILIConcern = hm_data_DILIConcern, diliClass = hm_data_max_w$diliClass)
 cbind(as.character(hm_data_DILIConcern), as.character(hm_data_max_w$diliClass))
@@ -3205,30 +3448,35 @@ cbind(as.character(hm_data_DILIConcern), as.character(hm_data_max_w$diliClass))
 # color anotations for columns. 
 # order columns, create triple color annotation: reporter, sensitivity, cmax
 
-old.colnames.order <- colnames(hm_data_data)
+old.colnames.order <- colnames(hm_data_max_w)
 write.table(old.colnames.order, file = "../tmp/old.colnames.order.txt", sep = "\t")
 
 new.colnames.order <- read.table(file = '../tmp/new.colnames.order.txt', sep ="\t")
-colIndex <- match(   new.colnames.order$V1, old.colnames.order)
+colnames(hm_data_max_w)
+hm_data_data <-  hm_data_max_w[ , -c(1:4, 85)]
+colnames(hm_data_data)
+colIndex <- match(   new.colnames.order$V1, colnames(hm_data_data))
 
-all(old.colnames.order[colIndex] == new.colnames.order)
-
+all(colnames(hm_data_data)[colIndex] == new.colnames.order$V1)
+19*5
 
 annCol <- list(cmax=
   rep(
-    c("cmax1","cmax5", "cmax10","cmax50", "cmax100"),  16
+    c("cmax1","cmax5", "cmax10","cmax50", "cmax100"),  19
     ),
-  reporter = rep(c("Srxn1", "Chop", "p21", "Icam1"), each = 20)
-  
+  reporter = c( 
+    rep(c("Srxn1", "Chop", "p21", "Icam1"), each = 20),
+    rep("Tox", 15)
   )
+)
+
+
 dim(hm_data_data)
-
-
 
 #colBreaks <-c(seq(-0.01, 0.3,length.out=15), seq(0.301,1.01, length.out = 14))
 
 
-colBreaks <-c(  -seq(1.01, 0.411, length.out = 8), -seq( 0.4, 0.01, length.out=16)  , 
+colBreaks <-c(  -seq(1.14, 0.411, length.out = 8), -seq( 0.4, 0.01, length.out=16)  , 
                 c(seq(0.01, 0.4,length.out=16), seq(0.411,1.01, length.out = 8)) )
 
 
@@ -3241,21 +3489,25 @@ pie(rep(1, length(my.colors)), labels = sprintf("%d (%s)", seq_along(my.colors),
 
 library(dendextend)
 
+hm_data_data <- as.data.frame(hm_data_data)
+rownames(hm_data_data) <- hm_data_max_w$treatment
 dist_hm_data <- dist(hm_data_data, method = c("euclidean", "maximum", "manhattan", "canberra", "binary" , "minkowski")[3])
 
 clust_hm_data<-hclust(dist_hm_data, method = c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median","centroid")[1])
 dd <- as.dendrogram(clust_hm_data)
-dd.reorder <- reorder(dd, wts =  c(150, 125:2))
+dd.reorder <- reorder(dd, wts =  c(rep(1, 9), rep(50, 84) ,rep(1,26)))
+
+
 
 #cutree(dd.reorder,h=7) # it now works on a dendrogram#
 # It is like using:
 #dend1 <-dendextend:::cutree.dendrogram(dd.reorder,h=7)
 
-dend1 <- color_branches(dd.reorder, k = 6)
-dend1 <- color_labels(dend1, k = 6)
+dend1 <- color_branches(dd, k = 4)
+dend1 <- color_labels(dend1, k = 4)
 plot(dend1)
 
-pdf("../generated/results/heatmap/rowClusterDendogram_manh_wardD_icamFun.pdf", width = 24, height = 10)
+pdf("../generated/results/heatmap/orig_hm_rowClusterDendogram_manh_wardD_noreo.pdf", width = 24, height = 10)
 plot(dend1)
 dev.off()
 
@@ -3263,10 +3515,13 @@ dev.off()
 hm_data_rowOrder <- labels(dend1)
 
 indOrder <- match( hm_data_rowOrder, rownames(hm_data_data))
+hm_data_data <- as.matrix(hm_data_data)
 
+dim(hm_data_data)
 
+  
 head(hm_data_data)
-pdf("../generated/results/heatmap/heatmap_manh_wardD_icamF.pdf", width= 12, height = 18)
+pdf("../generated/results/heatmap/orig_hm_heatmap_manh_wardDnoreo.pdf", width= 12, height = 18)
 aheatmap(hm_data_data[ indOrder ,colIndex], Rowv = NA, Colv=NA, 
          color = my.colors, breaks = colBreaks,
          fontsize = 10, width = 10, height=10, legend = TRUE,
@@ -3279,13 +3534,13 @@ dev.off()
 
 
 
-
-
 Create the time course figure with significance,
-first fit curve times on normal intensity data, then create time curves + statistics
+
 
 ```{r, fit_for_stats }
 load('../tmp/all.data.norm.Rdata')
+
+
 unique(all.data.norm[ , fingerprints])
 
 sort(unique(all.data.norm$treatment))
@@ -3300,20 +3555,20 @@ all.data.norm[treatment == "etoposide ", treatment := 'etoposide' ]
 sort(unique(all.data.norm[ , treatment]))
 sort(unique(all.data.norm[ , fingerprints]))
 
-
-annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
-
-annotationData <- data.table(annotationData)
-
-setnames(annotationData, old = "cmax", new = "onecmax")
-setkey(all.data.norm, 'treatment')  
-setkey(annotationData, 'treatment')
-
-sort(unique(all.data.norm[, treatment]))
-
-all.data.norm <- annotationData[all.data.norm]
-# select data with fda label and correct dissolve
-unique(all.data.norm[ ,Bob_anot ])
+# 
+# annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
+# 
+# annotationData <- data.table(annotationData)
+# 
+# setnames(annotationData, old = "cmax", new = "onecmax")
+# setkey(all.data.norm, 'treatment')  
+# setkey(annotationData, 'treatment')
+# 
+# sort(unique(all.data.norm[, treatment]))
+# 
+# all.data.norm <- annotationData[all.data.norm]
+# # select data with fda label and correct dissolve
+# unique(all.data.norm[ ,Bob_anot ])
 
 all.data.norm <- all.data.norm[ DILIConcern != "N/A",  ]
 all.data.norm <- all.data.norm[ Bob_anot != "general_cytotox_reactive",  ]
@@ -3322,9 +3577,15 @@ sort(unique(all.data.norm$treatment))
 # select features for plotting
 unique(all.data.norm$fingerprints)
 
+
+
+
+
  timeCourseData <- all.data.norm[ fingerprints %in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"), ]
 
-
+unique(all.data.norm[, fingerprints])
+ 
+ 
 # timeCourseData <- all.data.norm[ fingerprints %in% c("mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21", "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"), ]
 # 
 # timeCourseData[, fingerprints := gsub("mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1",
@@ -3494,7 +3755,7 @@ model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
 
 
 
-
+# annotate, then normalize ICAM1 to dmso, then statistics + plotting
 ```{r annotate}
 #annotate again, after modeling
 
@@ -3522,6 +3783,21 @@ require("fda.usc")
 # try ML_data
  load("../tmp/model.results.GFP_data.df.Rdata")
 model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
+
+# normalize ICAM1 to DMSO, by subtracting median dmso value from all ICAM1 values
+
+
+
+ICAM1_dmso <- model.results.GFP_data.df[ fingerprints == "GFP_dif.m2_ICAM1" & treatment == "dmso",
+                           median(mod), by = list(timeAfterExposure) ]
+setnames(ICAM1_dmso, old = 'V1', new = 'ICAM1_dmso')
+setkey(ICAM1_dmso, 'timeAfterExposure')
+setkey(model.results.GFP_data.df, 'timeAfterExposure')
+model.results.GFP_data.df<- ICAM1_dmso[ model.results.GFP_data.df]
+
+model.results.GFP_data.df[ fingerprints == "GFP_dif.m2_ICAM1",
+                           mod := mod - ICAM1_dmso ]
+
 
 all.fingerprints <- unique(model.results.GFP_data.df[, fingerprints])
 
@@ -3561,6 +3837,8 @@ table(model.results.GFP_data.df[treatment == "dmso", cmax])
 model.results.GFP_data.df[, cmax := factor(cmax, levels = c("1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
 
 table(model.results.GFP_data.df[, cmax])
+
+
 
 model.results.GFP_data.df<-model.results.GFP_data.df[ , mean(mod), by = list(treatment, cmax, replID, timeAfterExposure, TD, fingerprints)]
 
@@ -3659,7 +3937,7 @@ print(j)
 
 
 length(all.fingerprints.out[[1]])
-
+# na eten
 
 result <- lapply(all.fingerprints.out, "[" ) 
 result <- unlist(result)
@@ -3716,14 +3994,18 @@ result_stats[ , fingerprints := paste(sapply( strsplit(TD, "\\."), "[", 1),
 
 result_stats <- result_stats[ , list(treatment, cmax, fingerprints, pvalue)]
 result_stats[ , pval := "na"]
+
 result_stats[ pvalue <= 0.01 , pval := "*"]
 result_stats[ pvalue < 0.001 , pval := "**"]
 result_stats[ pvalue > 0.01 , pval := ""]
+result_stats[ is.na(pvalue)  , pval := "."]
 
-result_stats[ fingerprints == "GFP_pos.2m_Srxn1", yloc := 0.7]
-result_stats[ fingerprints == "GFP_pos.2m_DDIT3", yloc := 0.9]
-result_stats[ fingerprints == "GFP_pos.2m_p21", yloc := 1.1 ]
-result_stats[ fingerprints == "GFP_dif.m2_ICAM1", yloc := 1.3]
+
+
+result_stats[ fingerprints == "GFP_pos.2m_Srxn1", yloc := 0.15]
+result_stats[ fingerprints == "GFP_pos.2m_DDIT3", yloc := 0.4]
+result_stats[ fingerprints == "GFP_pos.2m_p21", yloc := 0.65 ]
+result_stats[ fingerprints == "GFP_dif.m2_ICAM1", yloc := 0.9]
 
 
 unique(model.results.GFP_data.df[, fingerprints])
@@ -3763,7 +4045,6 @@ model.results.GFP_data.df[ treatment == "dmso"]
 model.results.GFP_data.df.m[ , fingerprints := factor(fingerprints, levels =
  c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"  ))]
 
-(as.data.frame(model.results.GFP_data.df.m[ treatment == "digoxin", .N,by = list(cmax, fingerprints)]))
 
 all.treats <- sort(as.character(unique(model.results.GFP_data.df.m$treatment)))
 
@@ -3786,23 +4067,26 @@ unique(model.results.GFP_data.df.m[, fingerprints])
 myColors$fingerprint <- c("blue", "seagreen", "#CC6633", "purple")
 names(myColors$fingerprint) <- c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"  )
 
-125/3
-42+40
-length(1:42)
-length(43:84)
-length(85:length(all.treats))
 
+length(all.treats)
+119/3
 
 if( !(dir.exists('../generated/results/time_figure'))){
   dir.create('../generated/results/time_figure')
 }
-sel.comps <- sort(all.treats)[1:42]
-sel.comps <- sort(all.treats)[43:84]
-sel.comps <- sort(all.treats)[85:length(all.treats)]
 
-model.results.GFP_data.df[ treatment %in% sel.comps, ][ treatment == "benzbromarone" & fingerprints =="GFP_dif.m2_ICAM1" & cmax == "100cmax", ]
 
-result_stats[ treatment == "benzbromarone", ]
+
+
+result_stats[, cmax := factor(cmax, levels = c("1cmax", "5cmax", "10cmax" ,"50cmax", "100cmax"))]
+
+
+
+sel.comps <- sort(all.treats)[1:40]
+sel.comps <- sort(all.treats)[41:80]
+sel.comps <- sort(all.treats)[81:length(all.treats)]
+
+
 
   pdf(file = "../generated/results/time_figure/time_fig 3 of 3 figure_stats.pdf", height = 60, width = 10)
   p<- ggplot(data= model.results.GFP_data.df.m[ treatment %in% sel.comps, ]  , aes(x = timeAfterExposure, y = meanR, color = fingerprints)) + facet_grid(  treatment ~ cmax) +
@@ -3813,9 +4097,9 @@ result_stats[ treatment == "benzbromarone", ]
           panel.grid.minor = element_blank(),
           panel.border = element_blank(),
           panel.background = element_blank()) 
-  p <- p + coord_cartesian( ylim =c(-1.1,1.4))
+  p <- p + coord_cartesian( ylim =c(-1, 1))
   p <- p + geom_text( data = result_stats[ treatment %in% sel.comps,], 
-                     aes(x = 2, y =yloc, label =  pval ), size = 8) 
+                     aes(x = 4, y =yloc, label =  pval ), size = 10, alpha = 0.6) 
   
   print(p)
   dev.off()
@@ -3825,6 +4109,7 @@ unique(model.results.GFP_data.df.m$treatment)
 # sessie 31032017_afterTimePlots.Rdata gesaved
 ```
 
+
 concentration-response modeling and estimation of PODs
 
 
@@ -3832,18 +4117,16 @@ concentration-response modeling and estimation of PODs
 require(drc)
 # max of time of raw data:
 
-
 icamFun2 <- function(x) {
   ifelse(abs(max(x, na.rm=T)) >= abs(min(x,na.rm=T)), max(x,na.rm=T), min(x,na.rm=T))
 }
 unique(hm_data[, treatment])
 
-
-
 # fix concentrations
 dir('../metadata')
 annotationData <- as.data.table(read.delim(file ='../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep ="\t" ))
 annotationData <- annotationData[DILIConcern != "N/A" & Bob_anot != "general_cytotox_reactive" ]
+annotationData <- annotationData[ EndDissolvedQuality != "no",]
 cmaxdose <- annotationData[, c(1,9)]
 setnames(cmaxdose, old ="cmax", new = "conc")
 cmaxdose$cmax <- "1cmax"
@@ -3900,7 +4183,8 @@ dmso.data <- dose.response.modeling.data[ treatment == "dmso"]
 dmso.data <- dmso.data[ , mean(V1), by = list(treatment,replID, cell_line, fingerprints, cmax,fingertreat)]
 dmso.data[, conc :=0]
 dmso.data[, dose_uM :=0]
-keepComps <- annotationData$treatment[ annotationData$Bob_anot !="general_cytotox_reactive" & annotationData$DILIConcern != "N/A"]
+keepComps <- annotationData$treatment[ annotationData$Bob_anot !="general_cytotox_reactive" & annotationData$DILIConcern != "N/A" & annotationData$EndDissolvedQuality != "no"]
+
 dose.response.modeling.data <- dose.response.modeling.data[ treatment %in% keepComps]
 
 
@@ -3917,7 +4201,7 @@ for(i in seq_along(all.fingertreats)) { #seq_along(all.fingertreats)
 #test <- rbind(test,dmso.data.loop)
 test <- test[order(test$conc),]
 
-?drm
+
 model.out = NULL
 try(
 model.out <- drm(abs(V1) ~ conc, data = test, fct = LL.4() ) 
@@ -3934,7 +4218,7 @@ modelpred <- predict(model.out)
 # additional effect BMDs
 ED_est = NULL
 try(
-ED_est <- ED( model.out, respLev = modelpred[1] + 0.05, interval = "delta", type = "absolute")
+ED_est <- ED( model.out, respLev = modelpred[1] + 0.25, interval = "delta", type = "absolute")
 )
 
 output = NULL
@@ -3947,72 +4231,334 @@ conrespmodellist[[i]] <- output
 }
 dev.off()
 
+
 conresp_result <- do.call('rbind' , conrespmodellist)
 pp <- melt(conresp_result)
 head(pp)
 
 wp <- dcast(data = pp, treatment ~ fingerprint + variable   )
-
+head(wp)
 write.table( wp, file ="../generated/results/BMD_table.txt", sep ="\t", col.names=NA)
 
-# calculate a hazzard score.
-BOD_table <- wp[ , c(1, 2, 6, 10, 14)]
+
+# plot BMC vs 1cmax concentration + color-annotate DILI class
+tail(pp)
+BMC_data <- pp[pp$variable == "ED_est.Estimate",]
+#dim(na.omit(BMC_data))
+BMC_data <- as.data.table(BMC_data)
 
 
-BOD_table <- merge(BOD_table, annotationData, by ="treatment")
-head(BOD_table)
-BOD_table <- BOD_table[, c(1,2,3,4,5,7)]
+BMC_data <- na.omit(BMC_data)
+BMC_data <- merge(BMC_data, annotationData, by = "treatment", all.x = TRUE, all.y = FALSE)
 
-head(BOD_table)
-BOD_table_L <- melt(BOD_table)
-head(BOD_table_L)
-BOD_table_L <- as.data.table(BOD_table_L)
-BOD_table_L_m <- BOD_table_L[ , min(value, na.rm = TRUE), by = list(DILIConcern, treatment)]
-head(BOD_table_L)
+head(BMC_data)
+BMC_data <- as.data.table(BMC_data)
 
-test <- dcast(BOD_table_L,  treatment + DILIConcern ~variable, value.var = 'value')
-head(test)
+setnames(BMC_data, old = "value", new = "BMC")
+BMC_data[ , cmax := as.numeric(cmax)]
 
 
-plot(density(log(BOD_table_L_m$V1)))
-BOD_table_L_m[, treatment := factor(treatment, levels = treatment[ order(V1)])]
+BMC_data[, DILIConcern := factor(DILIConcern, levels = c("Most-DILI-Concern", "Less-DILI-Concern",
+                                 "Ambiguous DILI-concern", "No-DILI-Concern"))]
+
+BMC_data[ is.infinite(BMC), BMC := NA]
+
+summary(BMC_data$BMC)
+
+
+# removal outliers
+BMC_data[, iqr_BMC := IQR(BMC, na.rm = TRUE)]
+BMC_data <- BMC_data[abs(BMC) < (abs(BMC) + 3* iqr_BMC), ]
+
+BMC_data <- BMC_data[ BMC > 1*cmax ]
+BMC_data <- BMC_data[ BMC < 2*100*cmax ]
+BMC_data[ DILIConcern == "Most-DILI-Concern" , diliClass := "severe"]
+BMC_data[ DILIConcern != "Most-DILI-Concern" , diliClass := "nonSevere"]
+BMC_data[, diliClass := factor(diliClass, levels = c("severe", "nonSevere"))]
+BMC_data[, fingerprint := factor(fingerprint, levels = 
+                                   c("GFP_pos.2m_Srxn1", "GFP_pos.2m_Chop",
+                                     "GFP_pos.2m_p21","GFP_dif.m2_Icam1"))]
+
+BMC_data[ , cmaxnorn_BMC := log(BMC/cmax)]
+
+#BMC_data <- BMC_data[ , min(BMC), by = list(treatment, DILIConcern, cmax)]
+#setnames(BMC_data, old = "V1", new = "BMC")
+pdf( file = "../generated/results/concentration-response modeling/cmax_vs_BMC.pdf", height = 5, width = 6)
+ggplot(data = BMC_data, aes( x = log(cmax) ,y = log(BMC))) + geom_point(aes(color = diliClass)) +
+   theme_minimal() + facet_wrap(~fingerprint) +
+  geom_smooth(aes(group = diliClass, color = diliClass), se = FALSE, method = "lm", linetype = "dashed")
+# theme_sharp()  +# coord_cartesian(ylim=c(0,100)) + 
+dev.off()
 
 
 
-BOD_table_L_m$DILIConcern <- factor(BOD_table_L_m$DILIConcern, levels=c("No-DILI-Concern", "Ambiguous DILI-concern" ,"Less-DILI-Concern","Most-DILI-Concern"))
-
-head(BOD_table_L_m)
-require(drc)
-getMeanFunctions()
-
+summary(BMC_data$cmaxnorn_BMC)
 colScale <- scale_fill_manual(name = "DILIConcern",values = myColors$DILIConcern)
-colScale2 <- scale_color_manual(name = "variable",values = myColors$reporter)
+
+pdf(file ="../generated/results/concentration-response modeling/BMC_normalized.pdf", height = 8, width = 6)
+ggplot(data = BMC_data, aes(x = fingerprint, y = cmaxnorn_BMC, color = diliClass, group = interaction(diliClass, fingerprint))) + geom_boxplot(aes( color = diliClass), lwd = 2) +# +
+   theme_minimal() + theme( axis.text.x = element_text(angle = 45, vjust =1.4, size = 14 , 
+                                    colour = "grey20") )  + 
+  colScale + ylab(expression(log(BMC/cmax))) + xlab("reporter")
+dev.off()
+
+# significance of BMC difference
+unique(BMC_data$fingerprint)
+chop <- BMC_data[ fingerprint == "GFP_pos.2m_Chop",]
+
+lm0 <- lm(log(BMC) ~ log(cmax), data = chop)
+lm1 <- lm(log(BMC) ~ log(cmax) + diliClass, data = chop)
+anova(lm0, lm1)
+# Analysis of Variance Table
+
+# Model 1: log(BMC) ~ log(cmax)
+# Model 2: log(BMC) ~ log(cmax) + diliClass
+#   Res.Df    RSS Df Sum of Sq      F   Pr(>F)   
+# 1     28 29.097                                
+# 2     27 20.648  1    8.4491 11.049 0.002561 **
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
 
-BOD_table_L_m$variable[grepl("Icam1", BOD_table_L_m$variable) ] <- "Icam1"
-BOD_table_L_m$variable[grepl("Srxn1", BOD_table_L_m$variable) ] <- "Srxn1"
-BOD_table_L_m$variable[grepl("p21", BOD_table_L_m$variable) ] <- "p21"
-BOD_table_L_m$variable[grepl("Chop", BOD_table_L_m$variable) ] <- "Chop"
-BOD_table_L_m$variable<- factor(BOD_table_L_m$variable, levels = c("Srxn1","Chop","p21","Icam1"))
+srxn1 <- BMC_data[ fingerprint == "GFP_pos.2m_Srxn1",]
 
-setnames(BOD_table_L_m, old = "V1", new = "value")
-cbind( BOD_table_L_m$value,(log(BOD_table_L_m$value + 0.01)))
+lm0 <- lm(log(BMC) ~ log(cmax), data = srxn1)
+lm1 <- lm(log(BMC) ~ log(cmax) + diliClass, data = srxn1)
+anova(lm0, lm1)
+# Analysis of Variance Table
+# 
+# Model 1: log(BMC) ~ log(cmax)
+# Model 2: log(BMC) ~ log(cmax) + diliClass
+#   Res.Df    RSS Df Sum of Sq      F  Pr(>F)  
+# 1     54 32.443                              
+# 2     53 28.786  1    3.6572 6.7336 0.01221 *
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+icam1 <- BMC_data[ fingerprint == "GFP_dif.m2_Icam1",]
 
-ggplot(data = BOD_table_L_m, aes(x = treatment, y = log(value+0.1),  fill = DILIConcern)) +  theme_sharp()+
-        geom_bar( stat='identity', position = 'dodge', na.rm=F ) +# coord_cartesian(ylim=c(0,100)) + 
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
-                                    colour = "grey50") )  + 
-  colScale #+ colScale2
-source("theme_sharp.R")
+lm0 <- lm(log(BMC) ~ log(cmax), data = icam1)
+lm1 <- lm(log(BMC) ~ log(cmax) + diliClass, data = icam1)
+anova(lm0, lm1)
+# Analysis of Variance Table
+# 
+# Model 1: log(BMC) ~ log(cmax)
+# Model 2: log(BMC) ~ log(cmax) + diliClass
+#   Res.Df    RSS Df Sum of Sq      F Pr(>F)
+# 1     41 54.467                           
+# 2     40 51.757  1    2.7098 2.0943 0.1556
 
-min(c(NA,NA), na.rm=TRUE)
+p21 <- BMC_data[ fingerprint == "GFP_pos.2m_p21",]
 
-# select compounds
+lm0 <- lm(log(BMC) ~ log(cmax), data = p21)
+lm1 <- lm(log(BMC) ~ log(cmax) + diliClass, data = p21)
+anova(lm0, lm1)
+# Analysis of Variance Table
+# 
+# Model 1: log(BMC) ~ log(cmax)
+# Model 2: log(BMC) ~ log(cmax) + diliClass
+#   Res.Df    RSS Df Sum of Sq      F Pr(>F)
+# 1     18 6.5647                           
+# 2     17 6.5586  1 0.0061102 0.0158 0.9013
+
+
+
+# statistics of cmax normalized BMC's per diliClass - reporter  group
+
+
+t.test( srxn1$cmaxnorn_BMC[ srxn1$diliClass == "nonSevere"],
+        srxn1$cmaxnorn_BMC[ srxn1$diliClass == "severe"])
+
+t.test( icam1$cmaxnorn_BMC[ icam1$diliClass == "nonSevere"],
+        icam1$cmaxnorn_BMC[ icam1$diliClass == "severe"])
+
+t.test( p21$cmaxnorn_BMC[ p21$diliClass == "nonSevere"],
+        p21$cmaxnorn_BMC[ p21$diliClass == "severe"])
+
+
+t.test( chop$cmaxnorn_BMC[ chop$diliClass == "nonSevere"],
+        chop$cmaxnorn_BMC[ chop$diliClass == "severe"])
 
 
 
 ```
 
+
+model time courses data in hm
+use same data-format as from time courses figures
+```{r }
+
+dist.treat.dose = list()
+
+norm.data = list()
+
+
+for(i in  seq_along(all.fingerprints)) {
+ 
+  buffer.cells <- model.results.GFP_data.df.m[ fingerprints %in% all.fingerprints[i]]
+  time.vectors.perCell <-  dcast(data = buffer.cells, treat.dose~timeAfterExposure, value.var = "meanR" )
+  
+  rownames(time.vectors.perCell)<- time.vectors.perCell$treat.dose
+  time.vectors.perCell$treat.dose <- NULL
+  # noise is leading to clustering problems -->
+  # per-timepoint background normalize data using DMSO 75% (closest to high concentration DMSO level)
+  time.vectors.perCell<- as.matrix(time.vectors.perCell)
+  #backgrDMSO75 <- time.vectors.perCell[ rownames(time.vectors.perCell) %in% "DMSO 75",]
+  #time.vectors.perCell <- t(apply(time.vectors.perCell, MARGIN= 1,function(x) x - backgrDMSO75))
+  
+  dist.treat.dose[[i]] <- dist(time.vectors.perCell, method = "euclidean", diag=TRUE)
+  
+  
+  norm.data[[i]] <- melt(time.vectors.perCell)
+  norm.data[[i]]$fingerprints <- all.fingerprints[i]
+  colnames(norm.data[[i]]) <- c("treat.dose", "timeAfterExposure", "meanR", "fingerprint")
+}
+
+
+
+
+all.norm.data <- do.call("rbind", norm.data)
+class(all.norm.data)
+head(all.norm.data)
+
+
+
+
+dist.treat.dose <- lapply(dist.treat.dose, function(x) x<- as.matrix(x))
+length(dist.treat.dose)
+
+my.array<- array(unlist(dist.treat.dose), c(886,886,19))
+
+lapply(dist.treat.dose,  dim)
+19*886*886-length(unlist(dist.treat.dose))  
+
+dist.treat.dose.df <- apply(my.array, 1:2, mean)
+rownames(dist.treat.dose.df) <- rownames(dist.treat.dose[[1]])
+colnames(dist.treat.dose.df) <- colnames(dist.treat.dose[[1]])
+dist.treat.dose.df.d <- as.dist(dist.treat.dose.df)
+treat.dose.clust<-hclust(dist.treat.dose.df.d, method = "ward.D")
+names(treat.dose.clust)
+treat.dose.clust$labels
+treat.dose.clust$order
+results.treat.dose.order <- treat.dose.clust$labels[treat.dose.clust$order]
+pdf("cluster comp.dose.pdf", height= 10, width = 130)
+plot(treat.dose.clust)
+dev.off()
+?dist
+
+# same thing for the compounds
+comp.doses<- unique(model.results.GFP_data.df.m$treat.dose)
+
+
+head(all.norm.data)
+dist.cells = list()
+for(i in  seq_along(comp.doses)) {
+  
+  buffer.comp.dose <- all.norm.data[ all.norm.data$treat.dose %in% comp.doses[i],]
+  time.vectors.perCompound <-  dcast(data = buffer.comp.dose, fingerprint~timeAfterExposure, value.var = "meanR" )
+  rownames(time.vectors.perCompound)<- time.vectors.perCompound$fingerprint
+  time.vectors.perCompound$fingerprint <- NULL
+  
+  dist.cells[[i]] <- dist(time.vectors.perCompound, method = "manhattan",  diag=TRUE)
+  
+}
+
+dist.cells <- lapply(dist.cells, function(x) x<- as.matrix(x))
+
+length(dist.cells)
+my.array<- array(unlist(dist.cells), c(19,19,886))
+
+
+dist.cells.df <- apply(my.array, 1:2, mean)
+rownames(dist.cells.df) <- rownames(dist.cells[[1]])
+colnames(dist.cells.df) <- colnames(dist.cells[[1]])
+dist.cells.df.d <- as.dist(dist.cells.df)
+
+
+
+cells.clust<-hclust(dist.cells.df.d, method = "ward.D")
+names(cells.clust)
+cells.clust$labels
+cells.clust$order
+results.cell.order <- cells.clust$labels[cells.clust$order]
+results.cell.order
+plot(cells.clust)
+
+?dist
+?hclust
+
+# 
+# 
+# aheatmap(as.matrix((my.data.w.all)), Rowv = NULL, Colv=NULL, 
+#           annRow = treatmentAnot, annCol = reporterAnot,  color = my.colors,
+#          annColors = myColors,  fontsize = 10, width = 10, height=10, legend = FALSE
+#          
+#   )
+
+
+results.treat.dose.order
+results.cell.order
+
+
+
+min(all.norm.data$meanR)
+max(all.norm.data$meanR)
+mean(all.norm.data$meanR)
+my.colors
+
+display.brewer.all()
+colorRampPalette(brewer.pal(9, "Set1"))
+my.colors <- colorRampPalette(brewer.pal(9, "YlOrRd"))(50)
+colBreaks <-c(seq(-0.32, 0.15,length.out=20), seq(0.155,1.15, length.out = 31))
+
+
+
+# treatment annotation needed with treat.dose
+
+treatmentAnot
+treat.treat.dose <- model.results.GFP_data.df.m[, list(treatment, treat.dose)]
+treat.treat.dose<- unique(treat.treat.dose)
+setkey(treat.treat.dose, "treatment")
+treatmentAnot<- as.data.table(treatmentAnot)
+setkey(treatmentAnot, "treatment")
+treatmentAnot.treat.dose <- treatmentAnot[treat.treat.dose]
+
+write.table(treatmentAnot.treat.dose, file = "treatment.doseAnot.txt", sep ="\t", col.names=T)
+
+
+Anot.treat.dose <- treatmentAnot.treat.dose[, list(DILI_Type)]
+for( i in seq_along(all.fingerprints)){
+  
+  data.cell <- all.norm.data[ all.norm.data$fingerprint %in% all.fingerprints[i], ]
+  my.data.w <-  dcast(data = data.cell, treat.dose~timeAfterExposure, value.var = "meanR" )
+  
+  rownames(my.data.w) <- my.data.w$treat.dose
+  my.data.w$treat.dose<- NULL
+  ind <- match(results.treat.dose.order, rownames(my.data.w))
+  my.data.w<- my.data.w[ind, ]
+  if(
+    !all(rownames(my.data.w)==results.treat.dose.order)
+  ){
+    stop()
+  }
+  
+  ind2 <- match( rownames(my.data.w),treatmentAnot.treat.dose$treat.dose)
+  
+  treatmentAnot.treat.dose <- treatmentAnot.treat.dose[ind2,]
+  
+  pdf(file = paste(all.fingerprints[i], ".pdf", sep =""), width = 4, height = 16)
+  
+  
+  aheatmap(as.matrix((my.data.w)), Rowv = NA, Colv=NA, 
+           annRow = Anot.treat.dose,  breaks = colBreaks, color = my.colors,
+           annColors = myColors,  fontsize = 10, legend = TRUE
+  )
+  
+  dev.off()
+}
+
+
+
+```
 
 
 

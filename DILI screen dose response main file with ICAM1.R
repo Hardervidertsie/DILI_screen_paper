@@ -621,7 +621,11 @@ cmax100$cmax<-100
 
 
 newCmax<- rbind(newCmax,cmax5,cmax10, cmax25, cmax50, cmax100)
+
 newCmax<- as.data.table(newCmax)
+
+new.cmaxICAM1[, treatment := as.character(treatment)]
+
 setkeyv(new.cmaxICAM1, c("treatment", "dose_uM") )
 setkeyv(newCmax, c("treatment", "dose_uM"))
 
@@ -645,15 +649,7 @@ new.cmaxICAM1.long.dmso0[ treatment %in% "DMSO", dose_uM:=0]
 all.icam.feats<- unique(new.cmaxICAM1.long.dmso0[, variable])
 new.cmaxICAM1.long.dmso0[, replID:= plateID]
 new.cmaxICAM1.long.dmso0[, plateID:= paste(plateID, cmax, sep="_")]
-for(i in seq_along(all.icam.feats)){
-  
-  pdf(paste( all.icam.feats[i],"_newCMAXICAM.pdf" ,sep=""), width = 30, height =20)
-  p<-ggplot(new.cmaxICAM1.long.dmso0[variable%in% all.icam.feats[i] ],
-            aes(x=timeAfterExposure, y = value, color = as.character(cmax))) + 
-    geom_line(aes( group = plateID)) + geom_point(aes(shape=replID) ) + facet_wrap(~treatment)
-  print(p)
-  dev.off()
-}
+
 
 
 write.table(new.cmaxICAM1.long, file ="new.cmaxICAM1.long.txt", sep ="\t", col.names=TRUE)
@@ -961,7 +957,7 @@ print(dim(unique(raw.data[ raw.data$treatment == all.t[i], list(dose_uM,cmax) ])
 
 unique(raw.data$variable)
 require(stringr)
-########lol
+
 raw.data[ , variable:= gsub("count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.5.1",
                             "count_Nuclei_Intensity_IntegratedIntensity_Image_GFP_larger_7.51", variable)]
 
@@ -1744,6 +1740,8 @@ for( i in seq_along(fingerprintVarsD)){
  
  # toxiciteit data orig reporters: E:\DILI screen\meta analyse DILI screen\nieuwe cmax data\summaryFilesNieuwCmax (cytotox_data_originalReporters.txt)
 
+ 
+ 
 
 load("data_07april2016")
  # load cytotox data + verify with a plot
@@ -2563,7 +2561,7 @@ GFP_data[, cmax :=factor(cmax, levels = c("1cmax", "5cmax", "10cmax", "50cmax", 
 for( j in seq_along( keepFP )) {
   plotData <- GFP_data[ fingerprints %in% keepFP[ j]]
   p <- ggplot(data =plotData, aes(x= timeAfterExposure, y=value)) + facet_grid(treatment ~ cmax, scales = "free_x")
-  p<-p + geom_point(aes(color=replID, shape = replID)) +geom_line(aes(group=replID, color=replID)) + theme_sharp() +theme(strip.text.y = element_text(angle=0))
+  p<-p + geom_point(aes(color=replID, shape = replID)) +geom_line(aes(group=replID, color=replID)) + theme_sharp() + theme(strip.text.y = element_text(angle=0))
   pdf(file = paste(writepdfs, "_", keepFP[j], ".pdf", sep =""), width =20, height = 120)
   print(p)
   dev.off()
