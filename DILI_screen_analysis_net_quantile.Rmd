@@ -2553,6 +2553,7 @@ dev.off()
 
 head(model.results.GFP_data[[3]])
 model.results.GFP_data.df <- do.call("rbind", model.results.GFP_data)
+
 sort(unique(model.results.GFP_data.df$treatment))
 model.results.GFP_data_lowTP.df <- do.call("rbind", model.results.GFP_data_lowTP)
 
@@ -2825,6 +2826,10 @@ unique(anothm[!rmCompsInd,DILIConcern])
 ```
 
 
+
+feature selection, use training set (70%) for feature selection + SVM model tuning. Test on test set.
+Repeat several times changing the training/test entries to check consistency of results
+First add calculated BMC to data.
 ```{r Feature_selection}
 colnames(ML_data_final_data)
 dim(ML_data_final_data)
@@ -2858,48 +2863,124 @@ dev.off()
 head(ML_data_final_data_long)
 unique(ML_data_final_data_long$variable)
 
+# add BMC data (from later in script), note; adjusted outlier handling compared to BMC analysis later on
+
+wp <- read.table(  file ="../generated/results/BMD_table.txt", sep ="\t")
+
+BMC_data_add <- pp[pp$variable == "ED_est.Estimate",]
+#dim(na.omit(BMC_data))
+BMC_data_add <- as.data.table(BMC_data_add)
+sort(unique(BMC_data_add[, treatment]))
+length(unique(na.omit(BMC_data_add)[, treatment])) 
+
+BMC_data_add <- merge(BMC_data_add, annotationData, by = "treatment", all.x = TRUE, all.y = FALSE)
+
+head(BMC_data_add)
+BMC_data_add <- as.data.table(BMC_data_add)
+
+BMC_data_add[ , cmax := as.numeric(cmax)]
+
+# replace outliers by NA
+BMC_data_add[, iqr_BMC := IQR(value, na.rm = TRUE)]
+BMC_data_add[abs(value) > (abs(value) + 3* iqr_BMC), value := NA ]
+
+BMC_data_add[ value < 1*cmax , value := NA]
+BMC_data_add[ value > 2*100*cmax, value := NA ]
+BMC_data_add[ DILIConcern == "Most-DILI-Concern" , class := "severe"]
+BMC_data_add[ DILIConcern != "Most-DILI-Concern" , class := "nonSevere"]
+BMC_data_add[, diliClass := factor(class, levels = c("severe", "nonSevere"))]
+BMC_data_add[ , cmaxnorn_BMC := log(value/cmax)]
+
+
+# select per compound minimum value;
+BMC_data_add <- BMC_data_add[ , min(value, na.rm = TRUE), by = list(treatment, cmax, class)]
+
+setnames(BMC_data_add, old = "V1", new = "BMC")
+
+BMC_data_add[ is.infinite(BMC), BMC := NA]
+
+summary(BMC_data_add$BMC)
+
+unique(BMC_data_add$treatment[ !is.na(BMC_data_add$BMC)])
+
+# 81 compounds of 119 have a BMC value. remaining had a response < 0.25. NA values are not possible.
+# add dummy values to non-responsive treatments; without variation between classes and significantly higher than max BMC's:
+
+BMC_data_add[ is.na(BMC), BMC := 300 * cmax]
+
+BMC_data_add[ , cmaxnorm_BMC := log(BMC/cmax)]
+summary(BMC_data_add$cmaxnorm_BMC)
+
+sort(unique(BMC_data_add[, treatment]))
+BMC_data_add[ , cmax := log(cmax) ]
+BMC_data_add[ , BMC := log(BMC) ]
+
+BMC_data_add_long <- melt(BMC_data_add, id.vars = c('treatment', 'class'), variable.name = "variable" )
+
+  ML_data_final_data_long[ , severe:=NULL]
+ ML_data_final_data_long[ , nonSevere:=NULL]
+ 
+ ML_data_final_data_long <- rbind(ML_data_final_data_long,BMC_data_add_long )
 #KS test to asses difference in distributions of variables between the two classes
+ # split data in training and test set.
 all.ks.feats <- unique(ML_data_final_data_long[, variable])
+
+
+all.treatsnoDMSO_dili <- unique(ML_data_final_data_long[treatment != "dmso", list(treatment, class)])
+require(caret)
+caseInd <- createDataPartition(all.treatsnoDMSO_dili$class,p=.7,list=FALSE)
+
+table(all.treatsnoDMSO_dili[caseInd, class])
+table(all.treatsnoDMSO_dili[-caseInd, class])
+
+trainData_long<- as.data.frame(ML_data_final_data_long[ treatment %in% all.treatsnoDMSO_dili[caseInd, treatment] ])
+testData_long <- as.data.frame(ML_data_final_data_long[ treatment %in% all.treatsnoDMSO_dili[-caseInd, treatment] ])
+
+trainData_long <- as.data.table(trainData_long)
 
 results.ks = alist()
 for( i in seq_along(all.ks.feats)){
-results.ks[[i]] <- ks.test(x = ML_data_final_data_long[ variable == all.ks.feats[i] & class == "nonSevere" , value ],
-                           y = ML_data_final_data_long[ variable == all.ks.feats[i] & class == "severe" , value ],
+results.ks[[i]] <- ks.test(x = trainData_long[ variable == all.ks.feats[i] & class == "nonSevere" , value ],
+                           y = trainData_long[ variable == all.ks.feats[i] & class == "severe" , value ],
                            alternative = "two.sided", exact = FALSE)
   
 }
-names(results.ks[[1]])
-
-
-
 
 ks_results <- data.table(data.frame(feature = all.ks.feats, 
                                     statistic = sapply(results.ks, "[[", "statistic"),
                                     p.value = sapply(results.ks, "[[", "p.value")))
+
 write.table(ks_results, file = "../generated/results/feat_sel_ks_results.txt", sep = "\t", col.names = NA)
 ks_results <- ks_results[ order(ks_results$p.value), ]
 sign_ks_results <- ks_results[ p.value <= 0.05, ]
 
 
+ML_data_final_data$treatment[!unique(ML_data_final_data$treatment) %in% unique(BMC_data_add$treatment)] # dmso
+
+BMC_data_add
+ML_data_final_data[treatment == "dmso",]
+#ML_data_final_data <- (merge(ML_data_final_data, BMC_data_add, by = 'treatment', all.x = TRUE))
+
 
 ind <- colnames(ML_data_final_data) %in% sign_ks_results$feature
-sel_data <- ML_data_final_data[ , ind, with = FALSE]
-sel_data <- sel_data[, ncol(sel_data) : 1]
-
+# sel_data is training data
+sel_data <- as.data.frame(
+  ML_data_final_data[ treatment %in% all.treatsnoDMSO_dili[caseInd, treatment], ind, with = FALSE]
+)
 dim(sel_data)
+
+colnames(sel_data)
 write.table(cor(sel_data), file = "../generated/results/selFeatsCormatrix.txt", sep ="\t")
-# per cell line select least correlated features
+
 cor_data <- cor(sel_data)
 head(cor_data)
 
 library('caret')
 df2 = cor(sel_data)
 
-sel_data 
-
-hc = findCorrelation(abs(df2), cutoff=0.7) # putt any value as a "cutoff" 
+hc = findCorrelation(abs(df2), cutoff=0.8) # putt any value as a "cutoff" 
 hc = sort(hc)
-reduced_Data = sel_data[,-c(hc), with = FALSE]
+reduced_Data = sel_data[,-c(hc)]
 print(reduced_Data)
 dim(reduced_Data)
 colnames(reduced_Data)
@@ -2918,55 +2999,199 @@ cor(sel_data)
 
 
 
-# SVM classifier
+# SVM classifier, further feature selection & tuning on training set
 ```{r }
 
 require(gbm)
 require(MASS)
 require(caret)
+require(doParallel) # parallel processing
+require(dplyr) # Used by caret
+require(pROC) # 
+
+
+dim(sel_data)
 
 
 indKeep <-  colnames(ML_data_final_data) %in% selFeats
 sum(indKeep)
 
+indKeep <- indKeep | colnames(ML_data_final_data) %in% c("diliClass")
+
 ML_data_final_data[, diliClass := ML_data_final_annot$diliClass ]
 ML_data_final_data[, diliClass := factor(diliClass) ]
 
-ML_data_final_data_sel <- ML_data_final_data[, indKeep, with = FALSE]
-ML_data_final_data_sel$diliClass <- ML_data_final_annot$diliClass
-dim(ML_data_final_data_sel)
-ML_data_final_data_sel$diliClass <- factor(ML_data_final_data_sel$diliClass, levels =c("severe","nonSevere"))
+trainData <- as.data.frame(
+  ML_data_final_data[ treatment %in% all.treatsnoDMSO_dili[caseInd, treatment] , indKeep, with = FALSE]
+)
+testData <- as.data.frame(
+  ML_data_final_data[ treatment %in% all.treatsnoDMSO_dili[-caseInd, treatment] , indKeep, with = FALSE]
+)
 
-fitControl <- trainControl(method = "repeatedcv",
-                           number = 10,
-                           repeats = 10,
-                           ## Estimate class probabilities
-                           classProbs = TRUE,
-                           ## Evaluate performance using 
-                           ## the following function
-                           summaryFunction = twoClassSummary)
+trainData$diliClass <- factor(trainData$diliClass, levels =c("severe","nonSevere"))
+testData$diliClass <- factor(testData$diliClass, levels =c("severe","nonSevere"))
+dim(testData)
 
+# feature selection on 26 features using ga selection with svm
 
-nobs <- nrow(ML_data_final_data_sel)
-testlist = list()
-table(ML_data_final_data_sel$diliClass)
-
-ML_data_final_data_sel$diliClass <- factor(ML_data_final_data_sel$diliClass, levels = c("severe", "nonSevere"))
-
-getModelInfo("svmRadial" )
-resultTest = alist()
-
-for( i in 1:50){
-trainInd <- sample(1:nrow(ML_data_final_data_sel), 80)
+trainX <-trainData[, !colnames(trainData) %in% 'diliClass'] # Create training feature data frame
+testX <- testData[,!colnames(trainData) %in% 'diliClass'] # Create test feature data frame 
+y=trainData$diliClass # Target variable for training
+#Next run the GA. Note the first line of code registers the parallel workers to set up for having the caret run the GA in parallel using the 4 cores on my Windows laptop. 
 
 
-svmFit <- train( diliClass~ ., data = ML_data_final_data_sel[trainInd,], 
-                 method = "svmRadial", degree = 3, 
+# registerDoParallel(7)
+# 
+# 
+# ga_ctrl <- gafsControl(functions = rfGA, # Assess fitness with RF
+#                        method = "cv",    # 10 fold cross validation
+#                        genParallel=TRUE, # Use parallel programming
+#                        allowParallel = TRUE
+# 
+#                        )
+# 
+# 
+# set.seed(10)
+# lev <- c("severe","nonSevere")     # Set the levels
+# ##warenwe 
+# 
+# system.time(rf_ga2 <- gafs(x = trainX, y = y,
+#                            iters = 200, # 200 generations of algorithm
+#                            popSize = 15, # population size for each generation
+#                            levels = lev,
+#                            gafsControl = ga_ctrl
+#                            ))
+# registerDoParallel(7)
+# system.time(rf_ga3 <- gafs(x = trainX, y = y,
+#                            iters = 200, # 200 generations of algorithm
+#                            popSize = 10, # population size for each generation
+#                            levels = lev,
+#                            gafsControl = ga_ctrl
+#                            ))
+# registerDoParallel(7)
+# system.time(rf_ga4 <- gafs(x = trainX, y = y,
+#                            iters = 100, # 200 generations of algorithm
+#                            popSize = 30, # population size for each generation
+#                            levels = lev,
+#                            gafsControl = ga_ctrl
+#                            ))
+# 
+# rf_ga
+# rf_ga2
+# rf_ga3
+# rf_ga4
+# 
+# plot(rf_ga)
+# plot(rf_ga2)
+# plot(rf_ga3)
+# plot(rf_ga4)
+# 
+# # TRY 2 AND 4
+# 
+# rf_ga$ga$final
+# rf_ga2$ga$final
+# rf_ga3$ga$final
+# rf_ga4$ga$final
+# 
+# Reduce(intersect, list(rf_ga$ga$final,rf_ga2$ga$final,rf_ga3$ga$final,rf_ga4$ga$final))
+
+#This next section of code trains an SVM using only the selected features setting up a grid to search the parameter #space; again, using the parallel computing feature built into caret.
+
+#final <- rf_ga2$ga$final # Get features selected by GA
+#trainX2 <- as.data.frame(trainX[,final]) # training data: selected features
+#testX2 <- as.data.frame(testX[,final]) # test data: selected features
+
+# no fs?
+
+trainX2 <- as.data.frame(trainX) # training data: selected features
+testX2 <- as.data.frame(testX) # test data: selected features
+
+
+
+## SUPPORT VECTOR MACHINE MODEL
+ dim(testX2)
+#Note the default method of picking the best model is accuracy and Cohen's Kappa 
+# Set up training control
+ctrl <- trainControl(method="repeatedcv", # 10fold cross validation
+                     number = 10,
+repeats=10, # do 5 repititions of cv
+summaryFunction=twoClassSummary, # Use AUC to pick the best model
+classProbs=TRUE)
+ 
+#Use the expand.grid to specify the search space 
+#Note that the default search grid selects 3 values of each tuning parameter
+ 
+grid <- expand.grid(interaction.depth = c(1,2,3), #tree depths from 1 to 4
+n.trees=seq(10,100,by=10), # let iterations go from 10 to 100
+shrinkage=c(0.01,0.1), # Try 2 values fornlearning rate 
+n.minobsinnode = 20)
+# 
+# Set up for parallel processing
+set.seed(1951)
+registerDoParallel(6,cores=8)
+ 
+ #support vector machine or random forest that deals well with a large number of predictors.
+#Train and Tune the SVM
+psvmTuneGrid <- expand.grid(C=seq(0.005,0.1, length.out=5), sigma=seq(0.0005, 0.1, length.out=5))
+svm.tune <- train(x=trainX2,
+                  y= trainData$diliClass,
+                  method = "svmRadial",
+                  degree = 2,
+                 # tuneLength = 9, # 9 values of the cost function
+                  preProc = c("center","scale"),
+                  metric="ROC",
+                  trControl=ctrl,
+                 tuneGrid=psvmTuneGrid
+                 ) # same as for gbm above
+
+svm.tune
+#Finally, assess the performance of the model using the test data set.
+
+#Make predictions on the test data with the SVM Model
+
+svm.pred <- predict(svm.tune, newdata = testX2, type = "raw")
+
+confusionMatrix(svm.pred,testData$diliClass)
+
+
+
+svm.probs <- predict(svm.tune,testX2,type="prob") # Gen probs for ROC
+ 
+svm.ROC <- roc(predictor=svm.probs$severe,
+               response=testData$diliClass,
+               levels=rev(levels(testData$diliClass)))
+svm.ROC
+#Area under the curve: 0.8881
+plot(svm.ROC,main="ROC for SVM built with GA selected features")
+
+
+#====#====+#=====#+==
+
+
+svmFit_lin <- train( diliClass~ ., data = ML_data_final_data_sel[ ML_data_final_data$treatment != "dmso",], 
+                 method = "svmRadial", degree = 1, 
                  trControl = fitControl, 
                  preProc = c("center", "scale"),
-                 tuneLength = 12,
+                tuneLength = 12,
                  metric = "ROC"
+                 #tuneGrid = psvmTuneGrid
                  )
+
+
+psvmTuneGrid <- expand.grid(C=c(0.01,0.05,0.1), degree=c(1,2,3), scale=c( 0.01, 0.25,0.5,1))
+svmFit_poly <- train( diliClass~ ., data = ML_data_final_data_sel[ ML_data_final_data$treatment != "dmso",], 
+                 method = "svmPoly", 
+                 trControl = fitControl, 
+                 preProc = c("center", "scale"),
+                # tuneLength = 12,
+                 metric = "ROC",
+                 tuneGrid = psvmTuneGrid
+                 )
+
+
+
+# evalueer resultaten en schrijf weg
+
 
 
 print(sum(predict(svmFit, newdata = ML_data_final_data_sel[-trainInd, ] ) == ML_data_final_data_sel$diliClass[-trainInd])/ length(ML_data_final_data_sel$diliClass[-trainInd]))
@@ -2985,7 +3210,7 @@ sum(predict(svmFit, newdata = ML_data_final_data_sel ) == ML_data_final_data_sel
 
 
 ```{r heatmap_sel_features_prediction}
-ML_data_final_data_sel
+dim(ML_data_final_data_sel)
 # annotate DILI class and reporter type / cytotox
 
 annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
@@ -2998,12 +3223,13 @@ setkey(ML_data_final_data_sel, 'treatment')
 setkey(annotationData, 'treatment')
 hm_data_metadata <- annotationData[ML_data_final_data_sel]
 dim(hm_data_metadata)
+colnames(hm_data_metadata)
 hm_data_data <- hm_data_metadata[, -c(1:11,ncol(hm_data_metadata)), with = FALSE]
 hm_data_metadata <- hm_data_metadata[, c(1:11,ncol(hm_data_metadata)), with = FALSE]
 require(RColorBrewer)
 
-diliClass <-  c(brewer.pal(9,"YlOrRd")[c(1,6)])
-DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1, 2, 3,6)])
+#diliClass <-  c(brewer.pal(9,"YlOrRd")[c(1,6)])
+#DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1, 2, 3,6)])
 
 names(DILIConcern) <- c("No-DILI-Concern", "Ambiguous DILI-concern", "Less-DILI-Concern", "Most-DILI-Concern")
 names(diliClass) <- c("nonSevere", "severe")
@@ -3015,7 +3241,7 @@ myColors$type <- c("light blue", "light green", "#CC6633", "purple", "black")
 names(myColors$type) <- c("Srxn1", "Chop", "p21", "Icam1", "tox")
 hist(1:100, col =myColors$reporter)
 
-hm_data_metadata$diliClass <- factor(hm_data_max$diliClass, levels =c("severe", "nonSevere"))
+#hm_data_metadata$diliClass <- factor(hm_data_max$diliClass, levels =c("severe", "nonSevere"))
 treatmentAnot<-data.frame(DILIConcern = hm_data_metadata$DILIConcern, diliClass = hm_data_metadata$diliClass)
 
 
@@ -3040,7 +3266,9 @@ annCol <- list(type =
   reporter_anot$type
     )
 
-colBreaks <- seq(min(scale(hm_data_data))-2, max(scale(hm_data_data)), length.out = 50)
+min(hm_data_data, na.rm=TRUE)
+
+colBreaks <- seq(min(scale(hm_data_data), na.rm=TRUE)-2, max(scale(hm_data_data), na.rm=TRUE), length.out = 50)
 
 #colBreaks <-c(  -seq(1.01, 0.411, length.out = 8), -seq( 0.4, 0.01, length.out=16)  , 
 #                c(seq(0.01, 0.4,length.out=16), seq(0.411,1.01, length.out = 8)) )
@@ -3312,7 +3540,22 @@ setnames(hm_data_max, old = "V1", new = "value")
 annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
 
 annotationData <- data.table(annotationData)
+severityClass <- read.delim( file = '../metadata/severityClass.txt', sep = "\t", header = T)
+severityClass <- data.table(severityClass)
+setkey(annotationData, 'treatment' )
+setkey(severityClass, 'LabelCompoundName' )
+annotationData <- severityClass[annotationData]
+setnames(annotationData, old = 'LabelCompoundName', new = 'treatment' )
 setnames(annotationData, old = "cmax", new = "cmaxDose")
+annotationData <- annotationData[Bob_anot != 'general_cytotox_reactive']
+annotationData <- annotationData[DILIConcern != 'N/A',]
+annotationData <- annotationData[EndDissolvedQuality != 'no']
+table(annotationData$SeverityLabel)
+annotationData[ SeverityLabel == 0,SeverityLabel := 'No match']
+
+write.table(annotationData, file ='../tmp/annotatie_met_severityLabel.txt' , sep = "\t", col.names=NA)
+
+
 hm_data_max[ treatment == "carbamazapine", treatment := "carbamazepine"]
 hm_data_max[ treatment == "etoposide ", treatment := "etoposide"]
 
@@ -3350,11 +3593,11 @@ hm_data_max[ , fingerprints:= paste(fingerprints, cmax, sep = "_")]
 
 # need a fix for DMSO
 colnames(hm_data_max)
-hm_data_max_w <- dcast(hm_data_max, treatment + Bob_anot + EndDissolvedQuality + DILIConcern  ~ fingerprints  , value.var = "value" )
+hm_data_max_w <- dcast(hm_data_max, treatment + Bob_anot + EndDissolvedQuality + DILIConcern +SeverityLabel ~ fingerprints  , value.var = "value" )
 
 
 
-hm_data_max_w[1:5,1:5]
+hm_data_max_w[1:5,1:10]
 
 hm_data_max_w[1:5,1:11]
 colnames(hm_data_max_w)
@@ -3381,7 +3624,7 @@ hm_data_DILIConcern <- hm_data_max_w$DILIConcern
 head(hm_data_data)
 colnames(hm_data_max_w)
 dim(hm_data_max_w)
-hm_data_data <- as.matrix(hm_data_max_w[, -c(1:4,85)] )
+hm_data_data <- as.matrix(hm_data_max_w[, -c(1:5,86)] )
 
 rownames(hm_data_data) <- hm_data_treatments
 hm_data_max_w[,1:5,1:3]
@@ -3427,24 +3670,35 @@ colnames(hm_data_max_w)
 # color annotations
 require(RColorBrewer)
 
-diliClass <-  c(brewer.pal(9,"YlOrRd")[c(1,6)])
-DILIConcern <- c(brewer.pal(9,"YlOrRd")[c(1, 2, 3,6)])
+diliClass <-  c(brewer.pal(9,"BuPu")[c(4,9)])
+DILIConcern <- c(brewer.pal(9,"BuPu")[c(1, 3, 5,9)])
+SeverityLabel <- c(brewer.pal(9,"Greys")[-1])
 hist(1:100 , col=DILIConcern)
 
 names(DILIConcern) <- c("No-DILI-Concern", "Ambiguous DILI-concern", "Less-DILI-Concern", "Most-DILI-Concern")
 names(diliClass) <- c("nonSevere", "severe")
+names(SeverityLabel) <- c("No match", "Cholestasis; steatohepatitis",
+                          "Liver aminotransferases increase","Hyperbilirubinemia",
+                          "Jaundice", "Liver necrosis", "Acute liver failure",
+                          "Fatal hepatotoxicity"
+                          ) 
+                            
+  
+myColors <- list(DILIConcern = DILIConcern, diliClass = diliClass, SeverityLabel = SeverityLabel ) 
 
-myColors <- list(DILIConcern = DILIConcern, diliClass = diliClass ) 
+
 
 myColors$cmax <- brewer.pal(5, "BuGn" )
 names(myColors$cmax) <- c("cmax1", "cmax5","cmax10", "cmax50", "cmax100")
 
 myColors$reporter <- c("light blue", "light green", "#CC6633", "purple", "black")
 names(myColors$reporter) <- c("Srxn1", "Chop", "p21", "Icam1", "Tox")
+
+
 hm_data_max_w$diliClass <- factor(hm_data_max_w$diliClass, levels =c("severe", "nonSevere"))
 treatmentAnot<-data.frame(DILIConcern = hm_data_DILIConcern, diliClass = hm_data_max_w$diliClass)
 cbind(as.character(hm_data_DILIConcern), as.character(hm_data_max_w$diliClass))
-
+treatmentAnot$SeverityLabel <- hm_data_max_w$SeverityLabel
 # color anotations for columns. 
 # order columns, create triple color annotation: reporter, sensitivity, cmax
 
@@ -3453,7 +3707,7 @@ write.table(old.colnames.order, file = "../tmp/old.colnames.order.txt", sep = "\
 
 new.colnames.order <- read.table(file = '../tmp/new.colnames.order.txt', sep ="\t")
 colnames(hm_data_max_w)
-hm_data_data <-  hm_data_max_w[ , -c(1:4, 85)]
+hm_data_data <-  hm_data_max_w[ , -c(1:5, 86)]
 colnames(hm_data_data)
 colIndex <- match(   new.colnames.order$V1, colnames(hm_data_data))
 
@@ -3490,7 +3744,16 @@ pie(rep(1, length(my.colors)), labels = sprintf("%d (%s)", seq_along(my.colors),
 library(dendextend)
 
 hm_data_data <- as.data.frame(hm_data_data)
+# for DMSO only cellnumber has per cmax values, change this to mean value;
+
 rownames(hm_data_data) <- hm_data_max_w$treatment
+head(hm_data_data)
+hm_data_data[ rownames(hm_data_data) == "dmso", grepl("CellNumber", colnames(hm_data_data))]<-
+rowMeans(hm_data_data[ rownames(hm_data_data) == "dmso", grepl("CellNumber", colnames(hm_data_data))])
+
+
+
+
 dist_hm_data <- dist(hm_data_data, method = c("euclidean", "maximum", "manhattan", "canberra", "binary" , "minkowski")[3])
 
 clust_hm_data<-hclust(dist_hm_data, method = c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median","centroid")[1])
@@ -3518,6 +3781,8 @@ indOrder <- match( hm_data_rowOrder, rownames(hm_data_data))
 hm_data_data <- as.matrix(hm_data_data)
 
 dim(hm_data_data)
+
+
 
   
 head(hm_data_data)
@@ -3745,6 +4010,17 @@ model.results.GFP_data_lowTP.df <- do.call("rbind", model.results.GFP_data_lowTP
 
 model.results.GFP_data.df <- rbind(model.results.GFP_data.df, model.results.GFP_data_lowTP.df)
 
+
+dim(rbind(do.call("rbind", model.results.GFP_data), model.results.GFP_data_lowTP.df))
+head(model.results.GFP_data_lowTP.df)
+
+model.results.GFP_data.df[treatment == "acetaminophen" & cmax =="100cmax" & replID == "replicate_2" &
+                            fingerprints == "GFP_dif.m2_ICAM1"]
+
+dim(model.results.GFP_data_lowTP.df)
+dim(model.results.GFP_data.df)
+
+
 model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
 
 
@@ -3772,7 +4048,7 @@ model.results.GFP_data.df[DILIConcern == "Most-DILI-Concern", diliClass := "seve
 model.results.GFP_data.df[DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
 
 save(model.results.GFP_data.df, file = '../tmp/model.results.GFP_data.df.RData')
-
+load( '../tmp/model.results.GFP_data.df.RData')
 ```
 
 
@@ -3878,6 +4154,8 @@ class(model.results.GFP_data.df$timeAfterExposure)
 
 ggplot(data = model.results.GFP_data.df[ treatment == "dmso",], aes(x = timeAfterExposure, y = mod, color = replID) ) +
          geom_point() + facet_wrap(~fingerprints) 
+
+save(file = '../tmp/model.results.GFP_data.df.Rdata', model.results.GFP_data.df)
 
 metaTime <- unique(model.results.GFP_data.df[ , timeAfterExposure])
 
@@ -4120,13 +4398,14 @@ require(drc)
 icamFun2 <- function(x) {
   ifelse(abs(max(x, na.rm=T)) >= abs(min(x,na.rm=T)), max(x,na.rm=T), min(x,na.rm=T))
 }
-unique(hm_data[, treatment])
-
+sort(unique(hm_data[, treatment]))
+hm_data[ treatment == "carbamazapine", treatment := "carbamazepine"]
 # fix concentrations
 dir('../metadata')
 annotationData <- as.data.table(read.delim(file ='../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep ="\t" ))
 annotationData <- annotationData[DILIConcern != "N/A" & Bob_anot != "general_cytotox_reactive" ]
 annotationData <- annotationData[ EndDissolvedQuality != "no",]
+
 cmaxdose <- annotationData[, c(1,9)]
 setnames(cmaxdose, old ="cmax", new = "conc")
 cmaxdose$cmax <- "1cmax"
@@ -4170,14 +4449,14 @@ unique(dose.response.modeling.data$treatment)
 dose.response.modeling.data[ , dose_uM:= as.numeric(dose_uM)]
 
 dose.response.modeling.data[, fingertreat := paste(fingerprints, treatment, sep ="__" )]
-
+sort(unique(dose.response.modeling.data$treatment))
 # create 0 concentration based on DMSO
 pdf("../tmp/test.pdf", height =16, width = 16)
 p<-ggplot(data = dose.response.modeling.data, aes(x=conc, y = V1)) + geom_point(aes(color = fingerprints)) + facet_wrap(~treatment, scales="free_x")
 print(p)
 dev.off()
 
-dose.response.modeling.data[ treatment == "acarbose"]
+dose.response.modeling.data[ treatment == "carbamazepine"]
 
 dmso.data <- dose.response.modeling.data[ treatment == "dmso"]
 dmso.data <- dmso.data[ , mean(V1), by = list(treatment,replID, cell_line, fingerprints, cmax,fingertreat)]
@@ -4247,6 +4526,7 @@ BMC_data <- pp[pp$variable == "ED_est.Estimate",]
 #dim(na.omit(BMC_data))
 BMC_data <- as.data.table(BMC_data)
 
+length(unique(na.omit(BMC_data)[, treatment]))
 
 BMC_data <- na.omit(BMC_data)
 BMC_data <- merge(BMC_data, annotationData, by = "treatment", all.x = TRUE, all.y = FALSE)
@@ -4281,6 +4561,10 @@ BMC_data[, fingerprint := factor(fingerprint, levels =
 
 BMC_data[ , cmaxnorn_BMC := log(BMC/cmax)]
 
+
+# save bmc data for machine learning (previously in code)
+save(file = '../generated/results/concentration-response modeling/BMC_data.Rdata', BMC_data)
+
 #BMC_data <- BMC_data[ , min(BMC), by = list(treatment, DILIConcern, cmax)]
 #setnames(BMC_data, old = "V1", new = "BMC")
 pdf( file = "../generated/results/concentration-response modeling/cmax_vs_BMC.pdf", height = 5, width = 6)
@@ -4292,10 +4576,12 @@ dev.off()
 
 
 
+
+
 summary(BMC_data$cmaxnorn_BMC)
 colScale <- scale_fill_manual(name = "DILIConcern",values = myColors$DILIConcern)
 
-pdf(file ="../generated/results/concentration-response modeling/BMC_normalized.pdf", height = 8, width = 6)
+pdf(file ="../generated/results/concentration-response modeling/BMC_normalized_.pdf", height = 8, width = 6)
 ggplot(data = BMC_data, aes(x = fingerprint, y = cmaxnorn_BMC, color = diliClass, group = interaction(diliClass, fingerprint))) + geom_boxplot(aes( color = diliClass), lwd = 2) +# +
    theme_minimal() + theme( axis.text.x = element_text(angle = 45, vjust =1.4, size = 14 , 
                                     colour = "grey20") )  + 
@@ -4330,8 +4616,8 @@ anova(lm0, lm1)
 # Model 1: log(BMC) ~ log(cmax)
 # Model 2: log(BMC) ~ log(cmax) + diliClass
 #   Res.Df    RSS Df Sum of Sq      F  Pr(>F)  
-# 1     54 32.443                              
-# 2     53 28.786  1    3.6572 6.7336 0.01221 *
+# 1     55 32.804                              
+# 2     54 29.323  1    3.4806 6.4097 0.01429 *
 # ---
 # Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 icam1 <- BMC_data[ fingerprint == "GFP_dif.m2_Icam1",]
@@ -4387,25 +4673,32 @@ model time courses data in hm
 use same data-format as from time courses figures
 ```{r }
 
+load('../tmp/model.results.GFP_data.df.Rdata')
+
+
+# cmax for dmso should be empty
+model.results.GFP_data.df[ treatment == "dmso", cmax := ""]
+model.results.GFP_data.df.m <- model.results.GFP_data.df[ , mean(mod), by = list(treatment, cmax, timeAfterExposure, fingerprints)]
+setnames( model.results.GFP_data.df.m, old = "V1", new = "meanR" )
+
+model.results.GFP_data.df.m[,  treat.dose  := paste(treatment, cmax, sep = "_") ]
+
+all.fingerprints <- unique(model.results.GFP_data.df.m[, fingerprints])
 dist.treat.dose = list()
 
 norm.data = list()
 
-
 for(i in  seq_along(all.fingerprints)) {
- 
+
   buffer.cells <- model.results.GFP_data.df.m[ fingerprints %in% all.fingerprints[i]]
   time.vectors.perCell <-  dcast(data = buffer.cells, treat.dose~timeAfterExposure, value.var = "meanR" )
   
   rownames(time.vectors.perCell)<- time.vectors.perCell$treat.dose
   time.vectors.perCell$treat.dose <- NULL
-  # noise is leading to clustering problems -->
-  # per-timepoint background normalize data using DMSO 75% (closest to high concentration DMSO level)
+ 
   time.vectors.perCell<- as.matrix(time.vectors.perCell)
-  #backgrDMSO75 <- time.vectors.perCell[ rownames(time.vectors.perCell) %in% "DMSO 75",]
-  #time.vectors.perCell <- t(apply(time.vectors.perCell, MARGIN= 1,function(x) x - backgrDMSO75))
   
-  dist.treat.dose[[i]] <- dist(time.vectors.perCell, method = "euclidean", diag=TRUE)
+  dist.treat.dose[[i]] <- dist(time.vectors.perCell, method = "manhattan", diag=TRUE)
   
   
   norm.data[[i]] <- melt(time.vectors.perCell)
@@ -4414,22 +4707,18 @@ for(i in  seq_along(all.fingerprints)) {
 }
 
 
-
-
 all.norm.data <- do.call("rbind", norm.data)
 class(all.norm.data)
 head(all.norm.data)
 
-
-
-
 dist.treat.dose <- lapply(dist.treat.dose, function(x) x<- as.matrix(x))
 length(dist.treat.dose)
+dim(dist.treat.dose[[1]])
 
-my.array<- array(unlist(dist.treat.dose), c(886,886,19))
+my.array<- array(unlist(dist.treat.dose), c(591,591,4))
 
 lapply(dist.treat.dose,  dim)
-19*886*886-length(unlist(dist.treat.dose))  
+4*591*591-length(unlist(dist.treat.dose))  
 
 dist.treat.dose.df <- apply(my.array, 1:2, mean)
 rownames(dist.treat.dose.df) <- rownames(dist.treat.dose[[1]])
@@ -4440,10 +4729,12 @@ names(treat.dose.clust)
 treat.dose.clust$labels
 treat.dose.clust$order
 results.treat.dose.order <- treat.dose.clust$labels[treat.dose.clust$order]
-pdf("cluster comp.dose.pdf", height= 10, width = 130)
+dir.create("../generated/results/time_hm")
+pdf("../generated/results/time_hm/cluster comp.dose.pdf", height= 10, width = 130)
 plot(treat.dose.clust)
 dev.off()
-?dist
+
+
 
 # same thing for the compounds
 comp.doses<- unique(model.results.GFP_data.df.m$treat.dose)
@@ -4465,15 +4756,14 @@ for(i in  seq_along(comp.doses)) {
 dist.cells <- lapply(dist.cells, function(x) x<- as.matrix(x))
 
 length(dist.cells)
-my.array<- array(unlist(dist.cells), c(19,19,886))
-
+dim(dist.cells[[1]])
+my.array<- array(unlist(dist.cells), c(4,4,591))
+dist.cells[[1]]
 
 dist.cells.df <- apply(my.array, 1:2, mean)
 rownames(dist.cells.df) <- rownames(dist.cells[[1]])
 colnames(dist.cells.df) <- colnames(dist.cells[[1]])
 dist.cells.df.d <- as.dist(dist.cells.df)
-
-
 
 cells.clust<-hclust(dist.cells.df.d, method = "ward.D")
 names(cells.clust)
@@ -4482,9 +4772,6 @@ cells.clust$order
 results.cell.order <- cells.clust$labels[cells.clust$order]
 results.cell.order
 plot(cells.clust)
-
-?dist
-?hclust
 
 # 
 # 
@@ -4498,8 +4785,6 @@ plot(cells.clust)
 results.treat.dose.order
 results.cell.order
 
-
-
 min(all.norm.data$meanR)
 max(all.norm.data$meanR)
 mean(all.norm.data$meanR)
@@ -4507,25 +4792,41 @@ my.colors
 
 display.brewer.all()
 colorRampPalette(brewer.pal(9, "Set1"))
-my.colors <- colorRampPalette(brewer.pal(9, "YlOrRd"))(50)
-colBreaks <-c(seq(-0.32, 0.15,length.out=20), seq(0.155,1.15, length.out = 31))
+my.colors <- c(rev(brewer.pal(9, "YlGnBu")) , brewer.pal(9, "YlOrRd"))
 
+
+my.colors <- colorRampPalette(my.colors)(50)
+
+colBreaks <-c(seq(-1.2, 0.15,length.out=28), seq(0.155,1, length.out = 22))
 
 
 # treatment annotation needed with treat.dose
+#annotationData <- read.delim(file = '../metadata/DILI_annotation_dissolved_07_02_2017.txt', sep = "\t", header = T )
 
-treatmentAnot
+
+annotationData <- annotationData[, list(treatment, DILIConcern, SeverityLabel)]
+annotationData[ , diliClass := ifelse(DILIConcern == "Most-DILI-Concern", "severe", "nonSevere")]
+
+treatmentAnot <- annotationData
 treat.treat.dose <- model.results.GFP_data.df.m[, list(treatment, treat.dose)]
+
+
 treat.treat.dose<- unique(treat.treat.dose)
 setkey(treat.treat.dose, "treatment")
 treatmentAnot<- as.data.table(treatmentAnot)
 setkey(treatmentAnot, "treatment")
 treatmentAnot.treat.dose <- treatmentAnot[treat.treat.dose]
 
-write.table(treatmentAnot.treat.dose, file = "treatment.doseAnot.txt", sep ="\t", col.names=T)
+treatmentAnot.treat.dose[ grepl("_1cmax", treat.dose), cmax := "1cmax"]
+treatmentAnot.treat.dose[ grepl("_5cmax", treat.dose), cmax := "5cmax"]
+treatmentAnot.treat.dose[ grepl("_10cmax", treat.dose), cmax := "10cmax"]
+treatmentAnot.treat.dose[ grepl("_50cmax", treat.dose), cmax := "50cmax"]
+treatmentAnot.treat.dose[ grepl("_100cmax", treat.dose), cmax := "100cmax"]
 
+Anot.treat.dose <- treatmentAnot.treat.dose[, list(diliClass, SeverityLabel, cmax)]
+names(myColors$cmax) <- factor(c("1cmax", "5cmax","10cmax", "50cmax", "100cmax"), levels =
+                                   c("1cmax", "5cmax","10cmax", "50cmax", "100cmax"))
 
-Anot.treat.dose <- treatmentAnot.treat.dose[, list(DILI_Type)]
 for( i in seq_along(all.fingerprints)){
   
   data.cell <- all.norm.data[ all.norm.data$fingerprint %in% all.fingerprints[i], ]
@@ -4544,8 +4845,8 @@ for( i in seq_along(all.fingerprints)){
   ind2 <- match( rownames(my.data.w),treatmentAnot.treat.dose$treat.dose)
   
   treatmentAnot.treat.dose <- treatmentAnot.treat.dose[ind2,]
-  
-  pdf(file = paste(all.fingerprints[i], ".pdf", sep =""), width = 4, height = 16)
+  Anot.treat.dose <- treatmentAnot.treat.dose[, list( diliClass, SeverityLabel, cmax)]
+  pdf(file = paste('../generated/results/time_hm/', all.fingerprints[i], ".pdf", sep =""), width = 6, height = 16)
   
   
   aheatmap(as.matrix((my.data.w)), Rowv = NA, Colv=NA, 
@@ -4559,6 +4860,145 @@ for( i in seq_along(all.fingerprints)){
 
 
 ```
+
+
+sensitivity panel
+```{r sensitivity_panel}
+
+unique(all.data.norm$treatment)
+unique(all.data.norm$fingerprints)
+
+
+ggplot( data = all.data.norm[ treatment == 'clozapine' & cell_line == "p21"], aes( x = timeAfterExposure, y = value, color = cmax)) + geom_point(aes(shape = plateID, color = cmax)) + facet_wrap(~fingerprints, scales = 'free') 
+
+
+sel.sens.srxn1 <- all.data.norm[ 
+  treatment %in% c("dmso" ,"dem", "chlorpromazine") & cmax %in% c("0cmax","100cmax") & fingerprints %in% 
+    c( "GFP_pos.2m_Srxn1",   "GFP_pos.3m_Srxn1", "GFP_pos.m3sd_Srxn1", 
+       "mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1"
+       )
+     ]
+table(sel.sens.srxn1$treatment)
+
+sel.sens.ddits  <- all.data.norm[
+  treatment %in% c( "dmso", "thapsigargin","nitrofurantoin" ) & cmax %in% c("0cmax","100cmax")  & fingerprints %in%
+    c("GFP_pos.2m_DDIT3", "GFP_pos.3m_DDIT3","GFP_pos.m3sd_DDIT3",  
+      "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3") ]
+
+sel.sens.p21 <- all.data.norm[
+  treatment %in% c("dmso", "etoposide " ,"clozapine") & cmax %in% c("0cmax","10cmax") & fingerprints %in%
+    c("GFP_pos.2m_p21","GFP_pos.3m_p21","GFP_pos.m3sd_p21",
+      "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21")]
+
+sel.sens.icam1 <- all.data.norm[
+  treatment %in% c("dmso", "azathioprine","diclofenac") & cmax %in% c("0cmax","100cmax") & fingerprints %in%
+    c("GFP_dif.m1_ICAM1","GFP_dif.m2_ICAM1","GFP_dif.m3_ICAM1",
+      "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"
+      )]
+
+sel.sens<- rbind(sel.sens.srxn1, sel.sens.ddits, sel.sens.p21, sel.sens.icam1)
+
+sel.sens[ fingerprints == "mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", fingerprints := "Int_Srxn1" ]
+sel.sens[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", fingerprints := "Int_Chop" ]
+sel.sens[ fingerprints == "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21", fingerprints := "Int_p21" ]
+sel.sens[ fingerprints == "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1", fingerprints := "Int_Icam1" ]
+sel.sens[ ,fingerprints := gsub("DDIT3", "Chop", fingerprints)]
+sel.sens[ ,fingerprints := gsub("ICAM1", "Icam1", fingerprints)]
+
+sel.sens[ ,cell_line := gsub("ICAM1", "Icam1", cell_line)]
+sel.sens[ ,cell_line := gsub("DDIT3", "Chop", cell_line)]
+
+
+sel.sens[ , treatment := paste(treatment, cell_line, sep = " - ")]
+sel.sens[ , fingerprints := gsub("_Icam1", "", fingerprints)]
+sel.sens[ , fingerprints := gsub("_Chop", "", fingerprints)]
+sel.sens[ , fingerprints := gsub("_p21", "", fingerprints)]
+sel.sens[ , fingerprints := gsub("_Srxn1", "", fingerprints)]
+sel.sens[ , fingerprints := gsub("Int", "Intensity", fingerprints)]
+
+sel.sens[ , fingerprints := gsub("_dif", "", fingerprints)]
+sel.sens[ , fingerprints := gsub("pos", "", fingerprints)]
+sel.sens[ , fingerprints := gsub("2m", "m1", fingerprints)]
+sel.sens[ , fingerprints := gsub("3m", "m2", fingerprints)]
+sel.sens[ , fingerprints := gsub("m3sd", "m3", fingerprints)]
+sel.sens[ , fingerprints := gsub("_", "", fingerprints)]
+
+
+unique(sel.sens[, treatment])
+
+sel.sens[ , treatment := factor(treatment, levels = 
+                                  c("dmso - Srxn1", "chlorpromazine - Srxn1", 
+                                    "dem - Srxn1", "dmso - Chop",
+                                   "nitrofurantoin - Chop", "thapsigargin - Chop",
+                                   "dmso - p21", "clozapine - p21",
+                                   "etoposide  - p21",
+                                   "dmso - Icam1", "diclofenac - Icam1",
+                                   "azathioprine - Icam1"))  ]
+
+pdf( file = '../generated/results/sensitivity_panel_graph.pdf', height = 24, width = 5)
+p<- ggplot(data=sel.sens, aes(x = timeAfterExposure, y = value)) + facet_wrap(  ~treatment, ncol=1 ) +
+  #geom_point( aes(color=fingerprints), shape = 'x', size = 0.5)  + 
+  geom_smooth(aes(group = fingerprints, color = fingerprints), lwd = 1.2) +
+  
+  theme_minimal() +
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.4, size = 12 , 
+                                    colour = "grey50") ) + theme( strip.text.x = element_text( )) +
+  theme(plot.title = element_text(lineheight=.8, size = 8 )) + theme(legend.text=element_text(size=8))
+
+p <- p + coord_cartesian( ylim =c(-1,1), xlim = c(0, 20))
+print(p)
+dev.off()
+
+
+
+
+``` 
+
+
+
+TG GATES/ TGP:  spearman (monotonic) and pearson (linear) correlation between mRNA in PHH and protein level in HepG2  
+```{r tggates}
+# TGP PHH figure
+
+TGP_d <- read.table(file = '../data/DILI paper 3 genes.txt', sep ='\t', header =T)
+#select 24 hours high
+TGP_d<-as.data.table(TGP_d)
+TGP_d <- TGP_d[dose%in%"High" & time=="24hr"]
+TGP_d[, symbols:=factor(symbols, levels= c("SRXN1","DDIT3","CDKN1A"), ordered=TRUE) ]
+TGP_d <- TGP_d[, list(treatment, symbols, logFC)]
+
+# mean time course data from fit. select 24 hour or if lower end-time point for mmn dmso sub int data; 
+model.results.GFP_data.df.m
+
+
+PoDmax <- PoD[, max(value), by = list(treatment, fingerprints, DILI_Type)]
+setnames(PoDmax, "V1","GFP.2m")
+PoDmax[, symbols:=fingerprints]
+PoDmax[, fingerprints:=NULL]
+PoDmax[, symbols:=gsub("GFP_pos.2m_DDIT3", "DDIT3", symbols)]
+PoDmax[, symbols:=gsub("GFP_pos.2m_Srxn1", "SRXN1", symbols)]
+PoDmax[, symbols:=gsub("GFP_pos.2m_p21", "CDKN1A", symbols)]
+
+# manually change names to imaging convention
+indConv <- unique(PoDmax$treatment) %in% unique(TGP_d$treatment)
+unique(PoDmax$treatment)[!indConv]
+
+unique(TGP_d$treatment) # veranderen
+
+TGP_d$treatment <- gsub("WY-14643", "WY14643",TGP_d$treatment)
+TGP_d$treatment <- gsub("buthionine sulfoximine", "buthionine sulfoxamine",TGP_d$treatment)
+TGP_d$treatment <- gsub("cyclosporine A", "cyclosporin A",TGP_d$treatment)
+TGP_d$treatment <- gsub("erythromycin ethylsuccinate", "erythromycin",TGP_d$treatment)
+TGP_d$treatment <- gsub("diethyl maleate", "DEM",TGP_d$treatment)
+
+setkeyv(PoDmax, c("treatment" , "symbols" ))
+setkeyv(TGP_d, c("treatment", "symbols"))
+TGPImage<- PoDmax[ TGP_d ]
+TGPImage<- TGPImage[!is.na(treatment)]
+TGPImage<- TGPImage[ !is.na(DILI_Type)]
+
+
+``` 
 
 
 
