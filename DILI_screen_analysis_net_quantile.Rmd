@@ -2406,7 +2406,8 @@ ML_data <- ML_data[ Bob_anot != "general_cytotox_reactive",  ]
 
 ML_data <- ML_data[ EndDissolvedQuality != "no",  ]
 
-sort(unique(ML_data$treatment))
+table(unique(data.frame(ML_data$treatment,ML_data$DILIConcern ))$ML_data.DILIConcern)
+
 # select features for plotting
 
 ML_data <- ML_data[ fingerprints %in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"), ]
@@ -2449,9 +2450,9 @@ write.table(unique(ML_data[order( treatment,fingerprints, cmax, dose_uM) , list(
             file = "test.txt", sep = "\t")
 
 
+# timeCourseData from statistics modeling below (still need to fix order in script for reproducibility)
 
-
-GFP_data.list <- split(ML_data, ML_data$singleCurveName)
+GFP_data.list <- split(timeCourseData, timeCourseData$singleCurveName)
 length(GFP_data.list)
 
 ind<- lapply(GFP_data.list, function(x) { length(unique(x$timeAfterExposure)) }  )
@@ -2484,7 +2485,7 @@ model.results.GFP_data_lowTP = list()
 #include the fitted parameters to perform a F-test
 # perform t-test for fitted/sampled values after model fit
 
-pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO_replDMSO.pdf", height = 8, width = 12)
+#pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO_replDMSO.pdf", height = 8, width = 12)
 
 for( i in seq_along(GFP_data.list.lowTP) ){ #)
 
@@ -2502,18 +2503,18 @@ for( i in seq_along(GFP_data.list.lowTP) ){ #)
   model.results.GFP_data_lowTP[[i]]$timeAfterExposure <- dtTime$timeAfterExposure
   model.results.GFP_data_lowTP[[i]]$fingerprints <- unique(GFP_data.list.lowTP[[i]]$fingerprints)
   
-   p <- ggplot(data =  model.results.GFP_data_lowTP[[i]], aes(x=timeAfterExposure, y = mod)) + geom_point() + 
-      geom_point(data= GFP_data.list.lowTP[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
-   ggtitle(unique(GFP_data.list.lowTP[[i]]$singleCurveName)) + ylim(c(-1.2,1.2))
-  
-  print(p)
+  #  p <- ggplot(data =  model.results.GFP_data_lowTP[[i]], aes(x=timeAfterExposure, y = mod)) + geom_point() + 
+  #     geom_point(data= GFP_data.list.lowTP[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
+  #  ggtitle(unique(GFP_data.list.lowTP[[i]]$singleCurveName)) + ylim(c(-1.2,1.2))
+  # 
+  # print(p)
 }
-dev.off()
+#dev.off()
 
 
 model.results.GFP_data = list()
 
-pdf(file = "../generated/results/model fit graphs with DMSO_replDMSO.pdf", height = 8, width = 12)
+#pdf(file = "../generated/results/model fit graphs with DMSO_replDMSO.pdf", height = 8, width = 12)
 #nog een keer runnen (zonder pdf) - om fit p-waarden te extraheren
 for( i in seq_along(GFP_data.list)){ #
   
@@ -2532,11 +2533,11 @@ for( i in seq_along(GFP_data.list)){ #
   model.results.GFP_data[[i]]$timeAfterExposure <- dtTime$timeAfterExposure
   model.results.GFP_data[[i]]$fingerprints <- unique(GFP_data.list[[i]]$fingerprints)
   
-  p <- ggplot(data =  model.results.GFP_data[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() + 
-    geom_point(data= GFP_data.list[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
-    ggtitle(unique(GFP_data.list[[i]]$singleCurveName)) + ylim(c(-1.2,1.2))
-  
-  print(p)
+  # p <- ggplot(data =  model.results.GFP_data[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() + 
+  #   geom_point(data= GFP_data.list[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
+  #   ggtitle(unique(GFP_data.list[[i]]$singleCurveName)) + ylim(c(-1.2,1.2))
+  # 
+  # print(p)
   
   
   if((i%%500)==0){
@@ -2544,7 +2545,7 @@ for( i in seq_along(GFP_data.list)){ #
   }
   
 }
-dev.off()
+#dev.off()
 
 ##==##==##==##voor pauze
 # dont forgot to combine low TP with high TP
@@ -2925,9 +2926,10 @@ BMC_data_add_long <- melt(BMC_data_add, id.vars = c('treatment', 'class'), varia
  # split data in training and test set.
 all.ks.feats <- unique(ML_data_final_data_long[, variable])
 
-
+set.seed(1234)
+#set.seed(12)
 all.treatsnoDMSO_dili <- unique(ML_data_final_data_long[treatment != "dmso", list(treatment, class)])
-require(caret)
+#require(caret)
 caseInd <- createDataPartition(all.treatsnoDMSO_dili$class,p=.7,list=FALSE)
 
 table(all.treatsnoDMSO_dili[caseInd, class])
@@ -2999,7 +3001,7 @@ cor(sel_data)
 
 
 
-# SVM classifier, further feature selection & tuning on training set
+# SVM classifier, tuning on training set
 ```{r }
 
 require(gbm)
@@ -3132,19 +3134,21 @@ registerDoParallel(6,cores=8)
  
  #support vector machine or random forest that deals well with a large number of predictors.
 #Train and Tune the SVM
-psvmTuneGrid <- expand.grid(C=seq(0.005,0.1, length.out=5), sigma=seq(0.0005, 0.1, length.out=5))
+psvmTuneGrid <- expand.grid(C=seq(0.005,0.2, length.out=10), sigma=seq(0.05, 0.2, length.out=10))
 svm.tune <- train(x=trainX2,
                   y= trainData$diliClass,
                   method = "svmRadial",
                   degree = 2,
-                 # tuneLength = 9, # 9 values of the cost function
+                 #tuneLength = 9, # 9 values of the cost function
                   preProc = c("center","scale"),
                   metric="ROC",
                   trControl=ctrl,
                  tuneGrid=psvmTuneGrid
                  ) # same as for gbm above
 
-svm.tune
+#closeAllConnections()
+names(svm.tune)
+svm.tune$results[rev(order(svm.tune$results$ROC)), ]
 #Finally, assess the performance of the model using the test data set.
 
 #Make predictions on the test data with the SVM Model
@@ -3153,18 +3157,16 @@ svm.pred <- predict(svm.tune, newdata = testX2, type = "raw")
 
 confusionMatrix(svm.pred,testData$diliClass)
 
-
-
 svm.probs <- predict(svm.tune,testX2,type="prob") # Gen probs for ROC
  
 svm.ROC <- roc(predictor=svm.probs$severe,
                response=testData$diliClass,
                levels=rev(levels(testData$diliClass)))
 svm.ROC
-#Area under the curve: 0.8881
-plot(svm.ROC,main="ROC for SVM built with GA selected features")
 
+plot(svm.ROC,main="ROC for SVM", ylim = c(0,1))
 
+closeAllConnections()
 #====#====+#=====#+==
 
 
@@ -3207,9 +3209,12 @@ sum(predict(svmFit, newdata = ML_data_final_data_sel ) == ML_data_final_data_sel
 ```
 
 
-
+Note: the SVM and feature selection is currently located in the train_test_50_times.R script
 
 ```{r heatmap_sel_features_prediction}
+
+ML_data_final_data_sel <- ML_data_final_data[ , colnames(ML_data_final_data)%in% c(selFeats, "diliClass") , with = F]
+
 dim(ML_data_final_data_sel)
 # annotate DILI class and reporter type / cytotox
 
@@ -3224,8 +3229,8 @@ setkey(annotationData, 'treatment')
 hm_data_metadata <- annotationData[ML_data_final_data_sel]
 dim(hm_data_metadata)
 colnames(hm_data_metadata)
-hm_data_data <- hm_data_metadata[, -c(1:11,ncol(hm_data_metadata)), with = FALSE]
-hm_data_metadata <- hm_data_metadata[, c(1:11,ncol(hm_data_metadata)), with = FALSE]
+hm_data_data <- hm_data_metadata[, -c(1:11,30), with = FALSE]
+hm_data_metadata <- hm_data_metadata[, c(1:11,30), with = FALSE]
 require(RColorBrewer)
 
 #diliClass <-  c(brewer.pal(9,"YlOrRd")[c(1,6)])
@@ -3848,7 +3853,7 @@ unique(all.data.norm$fingerprints)
 
  timeCourseData <- all.data.norm[ fingerprints %in% c("GFP_pos.2m_Srxn1", "GFP_pos.2m_DDIT3", "GFP_pos.2m_p21", "GFP_dif.m2_ICAM1"), ]
 
-unique(all.data.norm[, fingerprints])
+unique(timeCourseData[, fingerprints])
  
  
 # timeCourseData <- all.data.norm[ fingerprints %in% c("mmnDMSO.sub_Cytoplasm_Intensity_IntegratedIntensity_Image_GFP_Srxn1", "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_DDIT3", "mmnDMSO.sub_Nuclei_Intensity_MeanIntensity_Image_GFP_p21", "mmnDMSO.sub_obj_cyto_only_Intensity_IntegratedIntensity_image_GFP_ICAM1"), ]
@@ -3864,37 +3869,107 @@ unique(all.data.norm[, fingerprints])
 unique(timeCourseData[, fingerprints])
 # generate replicates for dmso per plate
 
-replDMSO_srxn1 <- data.frame( plateID = unique(timeCourseData[ treatment == "dmso" & cell_line == "Srxn1", plateID]),
-       replID = paste0( "replicate_",as.numeric(as.factor(unique(timeCourseData[ treatment == "dmso" & cell_line == "Srxn1", plateID])))),
-       cell_line = "Srxn1", treatment ="dmso")
+# match dmso to correct plate for statistics
+
+timeCourseData[treatment == "dmso"]
+# dmso has no cmax value. However the dmso curves in statistics should match correct repl plates
+
+unique(timeCourseData[order(plateID), list(plateID, cmax, fingerprints)])
+
+timeCourseData[plateID == "2013_08_01_Srxn1" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "2013_08_14_Srxn1" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "2013_08_15_Srxn1" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2013_08_21_Srxn1" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2013_08_22_Srxn1" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2013_08_28_nii_Srxn1" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2013_08_28_niii_Srxn1" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2013_09_04_Srxn1" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2013_09_05_Srxn1" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "2013_09_09_Srxn1" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "2013_09_16_Srxn1" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "2013_09_25_Srxn1" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "2013_09_26_DDIT3" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "2013_10_03_DDIT3" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "2013_10_04_DDIT3" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2013_10_09_nii_p21" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "2013_10_09_niii_p21" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "2013_10_17_nii_DDIT3" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2013_10_17_niii" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2013_10_24_DDIT3" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2013_11_20_DDIT3" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2013_11_27_DDIT3" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "2013_12_04_DDIT3_nii" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "2013_12_04_DDIT3_niii" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "2013_12_11_DDIT3" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "20140701 - 50cMax_wells" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2014_02_05_nii_p21" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2014_02_05_p21_niii" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "2014_02_11_p21" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "2014_02_18_p21" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "2014_02_19_p21" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "2014_02_25_p21" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "2014_03_05_p21" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "20150601 - 5cMax_wells" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "20150604 - 10cMax_wells" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "20150608 - 10cMax_wells" & treatment == "dmso", cmax := "10cmax" ]
+timeCourseData[plateID == "20150828 - 50cMax_wells" & treatment == "dmso", cmax := "50cmax" ]
+timeCourseData[plateID == "20150829 - 1cMax_wells" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "20150830 - 100cMax_wells" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "20150914 - 1cMax_wells" & treatment == "dmso", cmax := "1cmax" ]
+timeCourseData[plateID == "20150914 - 1cMax_wells" & treatment == "dmso", cmax := "1cmax" ]
+# multiple concentrations per plate:
+dim(timeCourseData)
+timeCourseData<- as.data.frame(timeCourseData)
+
+multiply_dmso <- function(x, plateID){
+
+  dmsotmp <- data.frame(x[x$plateID == plateID & x$treatment == "dmso",  ])
+x <- x[! (x$plateID == plateID & x$treatment == "dmso"),  ]
+dmso1 <- dmsotmp
+dmso1$cmax <- "1cmax"
+dmso5 <- dmsotmp
+dmso5$cmax <- "5cmax"
+dmso10 <- dmsotmp
+dmso10$cmax <- "10cmax"
+dmso50 <- dmsotmp
+dmso50$cmax <- "50cmax"
+dmso100 <- dmsotmp
+dmso100$cmax <- "100cmax"
+dmsoall <- rbind(dmso1, dmso5,dmso10, dmso50, dmso100)
+table(dmsoall$cmax)
+x <- rbind(x, dmsoall)
+x
+}
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150923_CHOP_newCmax")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150923_ICAM1")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150923_P21_newCmax")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150923_SRXN1_newCmax")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150930_CHOP_newCmax")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150930_ICAM1")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150930_P21_newCmax")
+timeCourseData <- multiply_dmso(x = timeCourseData, plateID = "20150930_SRXN1_newCmax")
+table(timeCourseData[timeCourseData$treatment == "dmso", c("cmax")])
+
+timeCourseData<- as.data.table(timeCourseData)
+
+timeCourseData[plateID == "20151231 - 5cMax_wells" & treatment == "dmso", cmax := "5cmax" ]
+timeCourseData[plateID == "20160113 - 100cMax_wells" & treatment == "dmso", cmax := "100cmax" ]
+timeCourseData[plateID == "p21_50Cmax" & treatment == "dmso", cmax := "50cmax" ]
+
+(unique(timeCourseData[order(plateID), list(plateID, cmax, fingerprints)]))
+unique(timeCourseData[order(plateID), list(plateID, cmax, fingerprints)])[81:95,]
 
 
-replDMSO_chop <- data.frame( plateID = unique(timeCourseData[ treatment == "dmso" & cell_line == "DDIT3", plateID]),
-       replID = paste0( "replicate_",as.numeric(as.factor(unique(timeCourseData[ treatment == "dmso" & cell_line == "DDIT3", plateID])))),
-       cell_line = "DDIT3", treatment = "dmso")
+# remove non-relevant dmso levels
+timeCourseData <- timeCourseData[!(treatment == "dmso" & dose_uM %in% c(
+  "0.3", "0.4", "0.6", "0.8")) ,]
 
-replDMSO_p21 <- data.frame( plateID = unique(timeCourseData[ treatment == "dmso" & cell_line == "p21", plateID]),
-       replID = paste0( "replicate_",as.numeric(as.factor(unique(timeCourseData[ treatment == "dmso" & cell_line == "p21", plateID])))),
-       cell_line = "p21", treatment = "dmso")
-
-replDMSO_ICAM1 <- data.frame( plateID = unique(timeCourseData[ treatment == "dmso" & cell_line == "ICAM1", plateID]),
-       replID = paste0( "replicate_",as.numeric(as.factor(unique(timeCourseData[ treatment == "dmso" & cell_line == "ICAM1", plateID])))),
-       cell_line = "ICAM1", treatment = "dmso")
-
-
-replDMSO <- rbind(replDMSO_srxn1, replDMSO_chop, replDMSO_p21, replDMSO_ICAM1)
-replDMSO <- as.data.table(replDMSO)
-setnames(replDMSO, old = "replID", new = "replID_dmso")
-setkeyv(timeCourseData, c("plateID", "cell_line", "treatment"))
-setkeyv(replDMSO, c("plateID", "cell_line", "treatment"))
-timeCourseData <- replDMSO[timeCourseData]
-timeCourseData[!is.na(replID_dmso), replID := replID_dmso]
-
-timeCourseData[ , singleCurveName := paste(fingerprints, treatment, cmax, dose_uM, replID, sep = "__")]
-
-ggplot(data = timeCourseData[ treatment == "dmso" & cell_line == "ICAM1"], aes( x = timeAfterExposure, y = value,
-                                                                              color = replID)) + geom_point() 
-
+timeCourseData <- timeCourseData[ , mean(value, na.rm = TRUE), by = list(fingerprints, treatment, cmax, replID, timeAfterExposure)]
+timeCourseData[ , singleCurveName := paste(fingerprints, treatment, cmax, replID, sep = "__")]
+setnames(timeCourseData, old = "V1", new = "value")
+ggplot(data = timeCourseData[ treatment == "dmso" & fingerprints == "GFP_dif.m2_ICAM1"], aes( x = timeAfterExposure, y = value,
+                                                                              color = cmax)) + geom_point() 
+plot(density(timeCourseData[treatment == "dmso", value]))
 
 # testing for missing data; no missing data.
 write.table(unique(timeCourseData[order( treatment,fingerprints, cmax, dose_uM) , list(treatment,fingerprints, cmax, dose_uM)]),
@@ -3906,89 +3981,101 @@ write.table(unique(timeCourseData[order( treatment,fingerprints, cmax, dose_uM) 
 GFP_data.list <- split(timeCourseData, timeCourseData$singleCurveName)
 length(GFP_data.list)
 
-ind<- lapply(GFP_data.list, function(x) { length(unique(x$timeAfterExposure)) }  )
-
-head(ind)
-sort(unique(unlist(ind)))
-
-indd <- lapply(ind, function(x) x < 12)
-inddd<- unlist(indd)
-length(inddd)
-sum(inddd)
-length(GFP_data.list)
-sum(inddd)
-
-GFP_data.list.lowTP <- GFP_data.list[inddd]
-length(GFP_data.list.lowTP)
-ind3 <- lapply(GFP_data.list.lowTP, "[[", 'treatment')
-
-ind3 <- (sapply(ind3, unique)) == "zimelidine" 
-GFP_data.list.lowTP[ind3]
-
-length(GFP_data.list)
-GFP_data.list <- GFP_data.list[!inddd]
-length(GFP_data.list.lowTP) 
-length(GFP_data.list) 
-
-
-model.results.GFP_data_lowTP = list()
+# ind<- lapply(GFP_data.list, function(x) { length(unique(x$timeAfterExposure)) }  )
+# 
+# head(ind)
+# sort(unique(unlist(ind)))
+# 
+# indd <- lapply(ind, function(x) x < 12)
+# inddd<- unlist(indd)
+# length(inddd)
+# sum(inddd)
+# length(GFP_data.list)
+# sum(inddd)
+# 
+# GFP_data.list.lowTP <- GFP_data.list[inddd]
+# length(GFP_data.list.lowTP)
+# ind3 <- lapply(GFP_data.list.lowTP, "[[", 'treatment')
+# 
+# ind3 <- (sapply(ind3, unique)) == "zimelidine" 
+# GFP_data.list.lowTP[ind3]
+# 
+# length(GFP_data.list)
+# GFP_data.list <- GFP_data.list[!inddd]
+# length(GFP_data.list.lowTP) 
+# length(GFP_data.list) 
+# 
+# 
+# model.results.GFP_data_lowTP = list()
 
 #include the fitted parameters to perform a F-test
 # perform t-test for fitted/sampled values after model fit
 
-pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO_replDMSO.pdf", height = 8, width = 12)
+#pdf(file = "../generated/results/model fit graphs_lowTPwithDMSO_replDMSO.pdf", height = 8, width = 12)
 
-for( i in seq_along(GFP_data.list.lowTP) ){ #)
-
-  # acarbose 0.1502 replicate_1 GFP_pos.m3sd_DDIT3
-  fm1 <- lm(value ~ ns(timeAfterExposure, df =4), data = GFP_data.list.lowTP[[i]])
-  model.results.GFP_data_lowTP[[i]] <-  predict(fm1, dtTime<-data.frame(
-    timeAfterExposure = round(seq(0.6,23, length.out=22), digits=2)))
-  model.results.GFP_data_lowTP[[i]] <- as.data.frame(model.results.GFP_data_lowTP[[i]] )
-  colnames(model.results.GFP_data_lowTP[[i]])<- "mod"
-  
-  model.results.GFP_data_lowTP[[i]]$treatment <- unique(GFP_data.list.lowTP[[i]]$treatment)
-  model.results.GFP_data_lowTP[[i]]$dose_uM <- unique(GFP_data.list.lowTP[[i]]$dose_uM)
-  model.results.GFP_data_lowTP[[i]]$cmax <- unique(GFP_data.list.lowTP[[i]]$cmax)
-  model.results.GFP_data_lowTP[[i]]$replID <- unique(GFP_data.list.lowTP[[i]]$replID)
-  model.results.GFP_data_lowTP[[i]]$timeAfterExposure <- dtTime$timeAfterExposure
-  model.results.GFP_data_lowTP[[i]]$fingerprints <- unique(GFP_data.list.lowTP[[i]]$fingerprints)
-  
-   p <- ggplot(data =  model.results.GFP_data_lowTP[[i]], aes(x=timeAfterExposure, y = mod)) + geom_point() + 
-      geom_point(data= GFP_data.list.lowTP[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
-   ggtitle(unique(GFP_data.list.lowTP[[i]]$singleCurveName)) 
-  
-  print(p)
-}
-dev.off()
+# for( i in seq_along(GFP_data.list.lowTP) ){ #)
+# #i = sample(seq_along(GFP_data.list.lowTP),1)
+#   # acarbose 0.1502 replicate_1 GFP_pos.m3sd_DDIT3
+#    fm1 <- approx(x = GFP_data.list.lowTP[[i]]$timeAfterExposure,
+#                 y = GFP_data.list.lowTP[[i]]$value,
+#                 xout = round(seq(0,23, length.out=100), digits = 2),
+#                 rule = 2)
+#   #plot(GFP_data.list[[i]]$timeAfterExposure,GFP_data.list[[i]]$value)
+#   #  lines(fm1$x, fm1$y)
+#   
+#     model.results.GFP_data_lowTP[[i]] <- data.frame(mod = fm1$y )
+#   
+#   model.results.GFP_data_lowTP[[i]]$treatment <- unique(GFP_data.list.lowTP[[i]]$treatment)
+#   model.results.GFP_data_lowTP[[i]]$dose_uM <- unique(GFP_data.list.lowTP[[i]]$dose_uM)
+#   model.results.GFP_data_lowTP[[i]]$cmax <- unique(GFP_data.list.lowTP[[i]]$cmax)
+#   model.results.GFP_data_lowTP[[i]]$replID <- unique(GFP_data.list.lowTP[[i]]$replID)
+#   model.results.GFP_data_lowTP[[i]]$timeAfterExposure <- round(seq(0,23, length.out=100), digits = 2)
+#   model.results.GFP_data_lowTP[[i]]$fingerprints <- unique(GFP_data.list.lowTP[[i]]$fingerprints)
+#   
+#    p <- ggplot(data =  model.results.GFP_data_lowTP[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() +
+#       geom_point(data= GFP_data.list.lowTP[[i]], aes(x=timeAfterExposure, y = value, color = replID)) +
+#    ggtitle(unique(GFP_data.list.lowTP[[i]]$singleCurveName))
+# 
+#   print(p)
+# }
+#dev.off()
 
 
 model.results.GFP_data = list()
 
-pdf(file = "../generated/results/model fit graphs with DMSO_replDMSO.pdf", height = 8, width = 12)
+#pdf(file = "../generated/results/model fit graphs with DMSO_replDMSO.pdf", height = 8, width = 12)
 #nog een keer runnen (zonder pdf) - om fit p-waarden te extraheren
 for( i in seq_along(GFP_data.list)){ #
+#i = sample(seq_along(GFP_data.list),1)
+#inddmso <- which(grepl("dmso" , names(GFP_data.list)))
+# acarbose 0.1502 replicate_1 GFP_pos.m3sd_DDIT3
 
-  # acarbose 0.1502 replicate_1 GFP_pos.m3sd_DDIT3
-  fm1 <- lm(value ~ ns(timeAfterExposure, df =8), data = GFP_data.list[[i]])
-  model.results.GFP_data[[i]] <-  predict(fm1, dtTime<-data.frame(
-    timeAfterExposure = round(seq(0.6,23, length.out=22), digits=2)))
-  model.results.GFP_data[[i]] <- as.data.frame(model.results.GFP_data[[i]] )
-  colnames(model.results.GFP_data[[i]])<- "mod"
+    fm1 <- approx(x = GFP_data.list[[i]]$timeAfterExposure,
+                y = GFP_data.list[[i]]$value,
+                xout = round(seq(0,23, length.out=100), digits = 2),
+                rule = 2)
+  #plot(GFP_data.list[[i]]$timeAfterExposure,GFP_data.list[[i]]$value)
+  #  lines(fm1$x, fm1$y)
   
+    model.results.GFP_data[[i]] <- data.frame(mod = fm1$y )
   
   model.results.GFP_data[[i]]$treatment <- unique(GFP_data.list[[i]]$treatment)
   model.results.GFP_data[[i]]$dose_uM <- unique(GFP_data.list[[i]]$dose_uM)
   model.results.GFP_data[[i]]$cmax <- unique(GFP_data.list[[i]]$cmax)
   model.results.GFP_data[[i]]$replID <- unique(GFP_data.list[[i]]$replID)
-  model.results.GFP_data[[i]]$timeAfterExposure <- dtTime$timeAfterExposure
+  model.results.GFP_data[[i]]$timeAfterExposure <- round(seq(0,23, length.out=100), digits = 2)
   model.results.GFP_data[[i]]$fingerprints <- unique(GFP_data.list[[i]]$fingerprints)
   
-  p <- ggplot(data =  model.results.GFP_data[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() + 
-    geom_point(data= GFP_data.list[[i]], aes(x=timeAfterExposure, y = value, color = replID)) + 
-    ggtitle(unique(GFP_data.list[[i]]$singleCurveName)) 
+   # p <- ggplot(data =  model.results.GFP_data[[i]], aes(x=timeAfterExposure, y = mod)) + geom_line() +
+   #   geom_point(data= GFP_data.list[[i]], aes(x=timeAfterExposure, y = value, color = replID)) +
+   #   ggtitle(unique(GFP_data.list[[i]]$singleCurveName))
+   # 
+   # print(p)
+  #
+
   
-  print(p)
+  #and approxfun() ... or I suppose you could fit with lm for linear or lowess
+ # ?approx
   
   
   if((i%%500)==0){
@@ -3996,7 +4083,7 @@ for( i in seq_along(GFP_data.list)){ #
   }
   
 }
-dev.off()
+#dev.off()
 
 # 25-5-2017 verder. (ik doe even de time courses voor suus om aan verder te werken. nierna feature selection om heatmap te maken)
 # dont forgot to combine low TP with high TP
@@ -4006,18 +4093,18 @@ model.results.GFP_data[[1]]
 head(model.results.GFP_data[[3]])
 model.results.GFP_data.df <- do.call("rbind", model.results.GFP_data)
 sort(unique(model.results.GFP_data.df$treatment))
-model.results.GFP_data_lowTP.df <- do.call("rbind", model.results.GFP_data_lowTP)
+#model.results.GFP_data_lowTP.df <- do.call("rbind", model.results.GFP_data_lowTP)
 
-model.results.GFP_data.df <- rbind(model.results.GFP_data.df, model.results.GFP_data_lowTP.df)
+#model.results.GFP_data.df <- rbind(model.results.GFP_data.df, model.results.GFP_data_lowTP.df)
 
 
-dim(rbind(do.call("rbind", model.results.GFP_data), model.results.GFP_data_lowTP.df))
+#dim(rbind(do.call("rbind", model.results.GFP_data), model.results.GFP_data_lowTP.df))
 head(model.results.GFP_data_lowTP.df)
 
 model.results.GFP_data.df[treatment == "acetaminophen" & cmax =="100cmax" & replID == "replicate_2" &
                             fingerprints == "GFP_dif.m2_ICAM1"]
 
-dim(model.results.GFP_data_lowTP.df)
+#dim(model.results.GFP_data_lowTP.df)
 dim(model.results.GFP_data.df)
 
 
@@ -4047,8 +4134,11 @@ model.results.GFP_data.df <- anotData[model.results.GFP_data.df]
 model.results.GFP_data.df[DILIConcern == "Most-DILI-Concern", diliClass := "severe"]
 model.results.GFP_data.df[DILIConcern != "Most-DILI-Concern", diliClass := "nonSevere"]
 
-save(model.results.GFP_data.df, file = '../tmp/model.results.GFP_data.df.RData')
-load( '../tmp/model.results.GFP_data.df.RData')
+model.results.GFP_data.df <- model.results.GFP_data.df[DILIConcern != "N/A" & Bob_anot != "general_cytotox_reactive" ]
+model.results.GFP_data.df <- model.results.GFP_data.df[ EndDissolvedQuality != "no",]
+
+#save(model.results.GFP_data.df, file = '../tmp/model.results.GFP_data.df.RData')
+#load( '../tmp/model.results.GFP_data.df.RData')
 ```
 
 
@@ -4057,12 +4147,10 @@ load( '../tmp/model.results.GFP_data.df.RData')
 require(data.table)
 require("fda.usc")
 # try ML_data
- load("../tmp/model.results.GFP_data.df.Rdata")
+ #load("../tmp/model.results.GFP_data.df.Rdata")
 model.results.GFP_data.df <- as.data.table(model.results.GFP_data.df)
 
 # normalize ICAM1 to DMSO, by subtracting median dmso value from all ICAM1 values
-
-
 
 ICAM1_dmso <- model.results.GFP_data.df[ fingerprints == "GFP_dif.m2_ICAM1" & treatment == "dmso",
                            median(mod), by = list(timeAfterExposure) ]
@@ -4081,45 +4169,18 @@ model.results.GFP_data.df[ , TD := paste0(treatment, "(", cmax, ")")]
 model.results.GFP_data.df[ treatment == "dmso", TD := "dmso" ]
 
 
-# remove non-relevant dmso levels
-model.results.GFP_data.df <- model.results.GFP_data.df[! (treatment == "dmso" & dose_uM %in% c(
-  "0.3", "0.4", "0.6", "0.8")) ,]
 
-# add approx cmax values for DMSO treatments based on dose.
-unique(model.results.GFP_data.df[treatment == "dmso", dose_uM])
-table(model.results.GFP_data.df[treatment == "dmso", dose_uM])
-# 0.2 100cmax
-# 0.1 50cmax
-# 0.02 10 cmax
-# 0.01 5 cmax
-# 0.002 1 cmax
-
-
-model.results.GFP_data.df[ treatment == "dmso" & as.numeric(dose_uM) > 0.1, cmax := "100cmax" ]
-
-model.results.GFP_data.df[ treatment == "dmso" & as.numeric(dose_uM) <= 0.1 & 
-                             as.numeric(dose_uM) > 0.04 , cmax := "50cmax" ]
-
-model.results.GFP_data.df[ treatment == "dmso" & as.numeric(dose_uM) > 0.01 &
-                             as.numeric(dose_uM) <= 0.04, cmax := "10cmax" ]
-
-model.results.GFP_data.df[ treatment == "dmso" & as.numeric(dose_uM) > 0.004 & 
-                             as.numeric(dose_uM) <= 0.01, cmax := "5cmax" ]
-
-model.results.GFP_data.df[ treatment == "dmso" & as.numeric(dose_uM) <= 0.004, cmax := "1cmax" ]
-unique(model.results.GFP_data.df[treatment == "dmso", list(cmax, dose_uM)])
-table(model.results.GFP_data.df[treatment == "dmso", cmax])
 
 model.results.GFP_data.df[, cmax := factor(cmax, levels = c("1cmax", "5cmax", "10cmax", "50cmax", "100cmax"))]
 
 table(model.results.GFP_data.df[, cmax])
 
+model.results.GFP_data.df[ treatment != "dmso",]
+# check..
+#model.results.GFP_data.df<-model.results.GFP_data.df[ , mean(mod), by = list(treatment, cmax,  replID, timeAfterExposure, TD, fingerprints)]
 
 
-model.results.GFP_data.df<-model.results.GFP_data.df[ , mean(mod), by = list(treatment, cmax, replID, timeAfterExposure, TD, fingerprints)]
-
-
-setnames(model.results.GFP_data.df, old ="V1", new = "mod")
+#setnames(model.results.GFP_data.df, old ="V1", new = "mod")
 
 all.fingerprints
 unique(model.results.GFP_data.df[ fingerprints == "GFP_pos.2m_DDIT3", treatment])
@@ -4129,25 +4190,10 @@ all.treats.noDMSO <- all.treats[all.treats != "dmso"]
 model.results.GFP_data.df[ , treatment := factor(treatment, levels = 
                                                    factor(all.treats, levels = c(all.treats.noDMSO,"dmso")))]
 
-# ICAM1 dmso is TNF, same concentration in all treatments, solution for plotting; randomly distribute tnf controls over cmax's;
-icamDMSO <- model.results.GFP_data.df[treatment == "dmso" & fingerprints == "GFP_dif.m2_ICAM1", ]
-icamDMSO <- icamDMSO[ order(timeAfterExposure), ]
-table(icamDMSO$timeAfterExposure)
 
-icamDMSO[ seq(1,264, by = 12) , cmax:= "1cmax"]
-icamDMSO[ seq(1,264, by = 12) + 1 , cmax:= "1cmax"]
-icamDMSO[ seq(1,264, by = 12) + 2, cmax:= "5cmax"]
-icamDMSO[ seq(1,264, by = 12) + 3, cmax:= "5cmax"]
-icamDMSO[ seq(1,264, by = 12) + 4, cmax:= "10cmax"]
-icamDMSO[ seq(1,264, by = 12) + 5, cmax:= "10cmax"]
-icamDMSO[ seq(1,264, by = 12) + 6, cmax:= "50cmax"]
-icamDMSO[ seq(1,264, by = 12) + 7, cmax:= "50cmax"]
-icamDMSO[ seq(1,264, by = 12) + 8, cmax:= "100cmax"]
-icamDMSO[ seq(1,264, by = 12) + 9, cmax:= "100cmax"]
 
 table(icamDMSO[ , list(cmax, timeAfterExposure)])
-model.results.GFP_data.df <- model.results.GFP_data.df[!(treatment == "dmso" & fingerprints == "GFP_dif.m2_ICAM1"), ]
-model.results.GFP_data.df <- rbind(model.results.GFP_data.df, icamDMSO)
+
 
 
 class(model.results.GFP_data.df$timeAfterExposure)
@@ -4155,11 +4201,16 @@ class(model.results.GFP_data.df$timeAfterExposure)
 ggplot(data = model.results.GFP_data.df[ treatment == "dmso",], aes(x = timeAfterExposure, y = mod, color = replID) ) +
          geom_point() + facet_wrap(~fingerprints) 
 
-save(file = '../tmp/model.results.GFP_data.df.Rdata', model.results.GFP_data.df)
+#save(file = '../tmp/model.results.GFP_data.df.Rdata', model.results.GFP_data.df)
 
 metaTime <- unique(model.results.GFP_data.df[ , timeAfterExposure])
 
 all.fingerprints.out = list() # stores all the fingerprints lists
+
+#testamio <- timeCourseData[ (treatment == "amiodarone" & cmax == "1cmax" & fingerprints == "GFP_dif.m2_ICAM1") |
+ #                             (treatment == "dmso" & cmax == "1cmax" & fingerprints == "GFP_dif.m2_ICAM1")]
+
+#ggplot(data = testamio, aes(x= timeAfterExposure, y = value, color = treatment)) + geom_point()
 
 
 for ( j in seq_along( all.fingerprints ) ) {
@@ -4174,9 +4225,16 @@ all.TD <- all.TD[ all.TD != "dmso"]
 
 for ( i in seq_along(all.TD)) {
  
- TDSubset <- fingerprintSubset[TD == all.TD[i] | TD == "dmso", ]
- 
- TDSubset_wide <- dcast(data = TDSubset, formula = TD + replID + cmax ~ timeAfterExposure, value.var = "mod")
+  curCmax <- as.character(unique(fingerprintSubset[TD == all.TD[i]]$cmax))
+  
+  TDSubset <- fingerprintSubset[TD == all.TD[i] | (TD == "dmso" & cmax == curCmax), ]
+
+  #TDSubset<- fingerprintSubset[ (treatment == "didanosine" & cmax =="1cmax") | (treatment == "dmso" & cmax == "1cmax")]
+   
+  selTP <- unique(TDSubset$timeAfterExposure)
+  selTP <- selTP[seq(from = 0 ,to=100, by = 4)]
+  TDSubset <- TDSubset[timeAfterExposure %in% selTP, ]
+ TDSubset_wide <- dcast(data = TDSubset, formula = TD + replID + cmax  ~ timeAfterExposure, value.var = "mod")
 
  TDSubset_wide$TD <- factor(TDSubset_wide$TD)
 
@@ -4184,27 +4242,30 @@ Group <- grepl("dmso", TDSubset_wide[ , "TD"] )
 ind <- Group
 Group[ ind ] <- "dmso"
 Group[! ind ] <- unique(as.character(TDSubset_wide$TD)[ !grepl("dmso", TDSubset_wide$TD)])
-Group <- factor(Group)
 
+metaTime <- selTP
+
+if(!all(Group == TDSubset_wide$TD)){
+  stop('grouping error')
+}
 # check if dcast worked ( could be wrong cmax values for dmso .. )
 if( !length(Group) ==  ( nrow(TDSubset) / (length( metaTime ) ) ) ) {
   stop( paste( "dcast failed at i: ", i, 'and j: ', j ) )
 }
 
-  mdata <- as.matrix(TDSubset_wide[,-c(1, 2, 3) ])
+mdata <- as.matrix(TDSubset_wide[,-c(1, 2, 3) ])
   argvals <-metaTime
   
   fdata.imagedata <- fdata( mdata = mdata, argvals = argvals, rangeval = range(argvals))
-
+#anova.perm.out[[i]]$pvalue
     if( length( Group[!ind]) > 1 ) {
-    anova.perm.out[[i]] <- anova.onefactor( object = fdata.imagedata, group = Group, nboot = 1000, plot = FALSE)  
+    anova.perm.out[[i]] <- anova.onefactor( object = fdata.imagedata, group = Group, nboot = 500, plot = FALSE)  
   } else {
     anova.perm.out[[i]] <- list(pvalue = NA, stat = NA) # no replicate...
   }
     anova.perm.out[[i]]$wm <- NULL
     
   names(anova.perm.out)[i] <- paste( unique(as.character(Group[Group!="dmso"])), "dmso", sep = "_")
-
 
     }
   all.fingerprints.out[[j]] <- anova.perm.out
@@ -4213,7 +4274,7 @@ print(j)
   
 }
 
-
+# check out result, then use the ns fits for graph and add to current stats.
 length(all.fingerprints.out[[1]])
 # na eten
 
@@ -4234,14 +4295,15 @@ resultstats$TD <- gsub("_dmso.stat", "", resultstats$TD)
 
 result_stats <- dcast(resultstats, TD ~ variable, value.var = "result")
 head(result_stats)
+
 result_stats$treatfeat <- gsub( "(\\([0-9]{1,3}cmax\\))", "" , result_stats$TD)
 result_stats$treatment <- sapply(strsplit(result_stats$treatfeat, "\\."), '[')[2,]
 result_stats$feature <- sapply(strsplit(result_stats$treatfeat, "\\."), '[')[1,]
 result_stats$cmax <- str_extract(result_stats$TD,  "[0-9]{1,3}cmax"  )
 
-write.table( result_stats, file = "../generated/results/results_statistics_time_courses_replDMSO.txt", sep ="\t" )
+write.table( result_stats, file = "../generated/results/results_statistics_time_courses_replDMSO_.txt", sep ="\t" )
 
-
+?anova.onefactor
 
 
 ```
@@ -4252,7 +4314,7 @@ write.table( result_stats, file = "../generated/results/results_statistics_time_
 ```{r, time_plots }
 # calculate mean 
 require(plyr)
-result_stats <- read.delim("../generated/results/results_statistics_time_courses_replDMSO.txt", sep ="\t")
+#result_stats <- read.delim("../generated/results/results_statistics_time_courses_replDMSO.txt", sep ="\t")
 sort(unique(model.results.GFP_data.df[, treatment]))
 result_stats <- as.data.table(result_stats)
 
@@ -4261,9 +4323,9 @@ model.results.GFP_data.df.m <- model.results.GFP_data.df[ ,mean(mod, na.rm = TRU
 model.results.GFP_data.df.s <- model.results.GFP_data.df[ ,sd(mod, na.rm = TRUE) ,by = list(treatment, cmax, fingerprints, timeAfterExposure)]                            
 setnames(model.results.GFP_data.df.m, old = "V1", new = "meanR")
 setnames(model.results.GFP_data.df.s, old = "V1", new = "sd")
-
+result_stats<- data.table(result_stats)
 sapply( strsplit(result_stats$treatfeat, "\\."), "[",3)
-
+head(result_stats)
 result_stats[ , treatment := sapply( strsplit(treatfeat, "\\."), "[", 3)]
 result_stats[ , fingerprints := paste(sapply( strsplit(TD, "\\."), "[", 1), 
                                       sapply( strsplit(TD, "\\."), "[", 2),
@@ -4273,17 +4335,21 @@ result_stats[ , fingerprints := paste(sapply( strsplit(TD, "\\."), "[", 1),
 result_stats <- result_stats[ , list(treatment, cmax, fingerprints, pvalue)]
 result_stats[ , pval := "na"]
 
+
+result_stats$pvalue <- p.adjust(p=result_stats$pvalue, method ="fdr" )
+
 result_stats[ pvalue <= 0.01 , pval := "*"]
-result_stats[ pvalue < 0.001 , pval := "**"]
+result_stats[ pvalue <= 0.001 , pval := "**"]
+result_stats[ pvalue <= 0.0001 , pval := "***"]
 result_stats[ pvalue > 0.01 , pval := ""]
 result_stats[ is.na(pvalue)  , pval := "."]
 
 
 
-result_stats[ fingerprints == "GFP_pos.2m_Srxn1", yloc := 0.15]
-result_stats[ fingerprints == "GFP_pos.2m_DDIT3", yloc := 0.4]
-result_stats[ fingerprints == "GFP_pos.2m_p21", yloc := 0.65 ]
-result_stats[ fingerprints == "GFP_dif.m2_ICAM1", yloc := 0.9]
+result_stats[ fingerprints == "GFP_pos.2m_Srxn1", yloc := 0.9]
+result_stats[ fingerprints == "GFP_pos.2m_DDIT3", yloc := 0.65]
+result_stats[ fingerprints == "GFP_pos.2m_p21", yloc := 0.4 ]
+result_stats[ fingerprints == "GFP_dif.m2_ICAM1", yloc := 0.15]
 
 
 unique(model.results.GFP_data.df[, fingerprints])
@@ -4358,15 +4424,34 @@ if( !(dir.exists('../generated/results/time_figure'))){
 
 result_stats[, cmax := factor(cmax, levels = c("1cmax", "5cmax", "10cmax" ,"50cmax", "100cmax"))]
 
+# check if upregulated for non-icam1. (one way is of interest)
+upordownreg <- model.results.GFP_data.df.m[, mean(meanR), by = list( treatment, cmax, fingerprints)]
+dmsovals<- upordownreg[ treatment == "dmso",]
+dmsovals[, treatment := NULL]
+setnames(dmsovals, old ="V1", new ="dmso" )
+setnames(upordownreg, old ="V1", new ="value" )
+setkeyv(upordownreg, c('fingerprints','cmax'))
+setkeyv(dmsovals, c('fingerprints', 'cmax'))
+upordownreg<- dmsovals[upordownreg]
+upordownreg[ , change_wrt_dmso := value - dmso]
+setkeyv(result_stats, c('fingerprints' ,'treatment', 'cmax' ))
+setkeyv(upordownreg, c('fingerprints' ,'treatment', 'cmax' ))
+result_stats<-upordownreg[result_stats]
+result_stats[fingerprints != "GFP_dif.m2_ICAM1", pval:=ifelse(change_wrt_dmso <= 0, "", pval  )]
+
+cbind(result_stats$pvalue , p.adjust(p=result_stats$pvalue, method ="fdr" ))
+
+?p.adjust
 
 
 sel.comps <- sort(all.treats)[1:40]
 sel.comps <- sort(all.treats)[41:80]
 sel.comps <- sort(all.treats)[81:length(all.treats)]
 
+ggplot(data = model.results.GFP_data.df.m[ treatment == "dmso"],
+       aes(x = timeAfterExposure, y = meanR, color = cmax)) + geom_point() + facet_wrap(~fingerprints)
 
-
-  pdf(file = "../generated/results/time_figure/time_fig 3 of 3 figure_stats.pdf", height = 60, width = 10)
+  pdf(file = "../generated/results/time_figure/time_fig 3 of 3 figure_stats_tmp_m2.pdf", height = 60, width = 10)
   p<- ggplot(data= model.results.GFP_data.df.m[ treatment %in% sel.comps, ]  , aes(x = timeAfterExposure, y = meanR, color = fingerprints)) + facet_grid(  treatment ~ cmax) +
     geom_line( size = 2)  + scale_color_manual(values=myColors$fingerprint) +
     theme_bw() +
@@ -4378,11 +4463,16 @@ sel.comps <- sort(all.treats)[81:length(all.treats)]
   p <- p + coord_cartesian( ylim =c(-1, 1))
   p <- p + geom_text( data = result_stats[ treatment %in% sel.comps,], 
                      aes(x = 4, y =yloc, label =  pval ), size = 10, alpha = 0.6) 
-  
+  result_stats[ treatment %in% sel.comps & cmax=="1cmax",]
   print(p)
   dev.off()
+result_stats[treatment == "didanosine" & cmax =="1cmax"]
+  ggplot(data = model.results.GFP_data.df[(treatment == "didanosine" &cmax == "1cmax" & fingerprints ==  "GFP_pos.2m_Srxn1") |
+  (treatment == "dmso"  & fingerprints ==  "GFP_pos.2m_Srxn1" & cmax =="1cmax") ],aes(x=timeAfterExposure, y = mod, color = treatment, shape= replID) ) + geom_point()
+  
+  result_stats[treatment =="betaine"]
 
-unique(model.results.GFP_data.df.m$treatment)
+  unique(model.results.GFP_data.df.m$treatment)
 
 # sessie 31032017_afterTimePlots.Rdata gesaved
 ```
@@ -4968,34 +5058,88 @@ TGP_d[, symbols:=factor(symbols, levels= c("SRXN1","DDIT3","CDKN1A"), ordered=TR
 TGP_d <- TGP_d[, list(treatment, symbols, logFC)]
 
 # mean time course data from fit. select 24 hour or if lower end-time point for mmn dmso sub int data; 
-model.results.GFP_data.df.m
+
+colnames(hm_data_max_w)
+
+plot(hm_data_max_w[treatment == "dmso", ])
+PoDmax <- data.frame(hm_data_max_w[, list(GFP_pos.2m_Srxn1_100cmax, GFP_pos.2m_Chop_100cmax, GFP_pos.2m_p21_100cmax )])
+head(PoDmax)
+#PoDmax <- data.frame(hm_data_max_w[, list(Int_Srxn1_100cmax, Int_Chop_100cmax, Int_p21_100cmax )])
+rownames(PoDmax) <- hm_data_max_w$treatment
+head(PoDmax)
+TGP_d <- dcast(TGP_d, treatment ~symbols, value.var = 'logFC')
+dim(TGP_d)
+head(dim(TGP_d))
+rownames(TGP_d) <- TGP_d$treatment
+TGP_d$treatment <- NULL
+
+# manually change names to match
+rownames(PoDmax)[!indConv]
+rownames(TGP_d) <- tolower(rownames(TGP_d))
+
+indConv <- rownames(PoDmax) %in% rownames(TGP_d)
+rownames(PoDmax)[!indConv]
+sort(all.treats)
+sort(rownames(TGP_d))
 
 
-PoDmax <- PoD[, max(value), by = list(treatment, fingerprints, DILI_Type)]
-setnames(PoDmax, "V1","GFP.2m")
-PoDmax[, symbols:=fingerprints]
-PoDmax[, fingerprints:=NULL]
-PoDmax[, symbols:=gsub("GFP_pos.2m_DDIT3", "DDIT3", symbols)]
-PoDmax[, symbols:=gsub("GFP_pos.2m_Srxn1", "SRXN1", symbols)]
-PoDmax[, symbols:=gsub("GFP_pos.2m_p21", "CDKN1A", symbols)]
+rownames(TGP_d) <- gsub("cyclosporine a", "cyclosporin",rownames(TGP_d))
+rownames(TGP_d) <- gsub("erythromycin ethylsuccinate", "erythromycin",rownames(TGP_d))
 
-# manually change names to imaging convention
-indConv <- unique(PoDmax$treatment) %in% unique(TGP_d$treatment)
-unique(PoDmax$treatment)[!indConv]
+head(TGP_d)
+head(PoDmax)
+ind <- match(rownames(TGP_d), rownames(PoDmax))
+TGP_d$treat  <- rownames(TGP_d)
+PoDmax$treat <- rownames(PoDmax)
+dim(PoDmax)
 
-unique(TGP_d$treatment) # veranderen
+TGP_d_PoDmax <- merge(PoDmax, TGP_d, by ='treat')
 
-TGP_d$treatment <- gsub("WY-14643", "WY14643",TGP_d$treatment)
-TGP_d$treatment <- gsub("buthionine sulfoximine", "buthionine sulfoxamine",TGP_d$treatment)
-TGP_d$treatment <- gsub("cyclosporine A", "cyclosporin A",TGP_d$treatment)
-TGP_d$treatment <- gsub("erythromycin ethylsuccinate", "erythromycin",TGP_d$treatment)
-TGP_d$treatment <- gsub("diethyl maleate", "DEM",TGP_d$treatment)
 
-setkeyv(PoDmax, c("treatment" , "symbols" ))
-setkeyv(TGP_d, c("treatment", "symbols"))
-TGPImage<- PoDmax[ TGP_d ]
-TGPImage<- TGPImage[!is.na(treatment)]
-TGPImage<- TGPImage[ !is.na(DILI_Type)]
+
+head(TGP_d_PoDmax)
+TGP_d_PoDmax <- na.omit(TGP_d_PoDmax)
+head(TGP_d_PoDmax)
+
+cor(TGP_d_PoDmax[, "GFP_pos.2m_Srxn1_100cmax"], TGP_d_PoDmax[, "SRXN1"], method = 'spearman')
+cor(TGP_d_PoDmax[, "GFP_pos.2m_Srxn1_100cmax"], TGP_d_PoDmax[, "SRXN1"], method = 'pearson')
+
+cor(TGP_d_PoDmax[, "GFP_pos.2m_Chop_100cmax"], TGP_d_PoDmax[, "DDIT3"], method = 'spearman')
+cor(TGP_d_PoDmax[, "GFP_pos.2m_Chop_100cmax"], TGP_d_PoDmax[, "DDIT3"], method = 'pearson')
+
+cor(TGP_d_PoDmax[, "GFP_pos.2m_p21_100cmax"], TGP_d_PoDmax[, "CDKN1A"], method = 'spearman')
+cor(TGP_d_PoDmax[, "GFP_pos.2m_p21_100cmax"], TGP_d_PoDmax[, "CDKN1A"], method = 'pearson')
+
+cor.test(TGP_d_PoDmax[, "GFP_pos.2m_Srxn1_100cmax"], TGP_d_PoDmax[, "SRXN1"], method = 'spearman')
+cor.test(TGP_d_PoDmax[, "GFP_pos.2m_Srxn1_100cmax"], TGP_d_PoDmax[, "SRXN1"], method = 'pearson')
+
+cor.test(TGP_d_PoDmax[, "GFP_pos.2m_Chop_100cmax"], TGP_d_PoDmax[, "DDIT3"], method = 'spearman')
+cor.test(TGP_d_PoDmax[, "GFP_pos.2m_Chop_100cmax"], TGP_d_PoDmax[, "DDIT3"], method = 'pearson')
+
+cor.test(TGP_d_PoDmax[, "GFP_pos.2m_p21_100cmax"], TGP_d_PoDmax[, "CDKN1A"], method = 'spearman')
+cor.test(TGP_d_PoDmax[, "GFP_pos.2m_p21_100cmax"], TGP_d_PoDmax[, "CDKN1A"], method = 'pearson')
+
+
+pdf(file = '../generated/results/tg-gates/tggates_lm.pdf', height = 6, width = 6)
+
+plot( TGP_d_PoDmax[, "SRXN1"],TGP_d_PoDmax[, "GFP_pos.2m_Srxn1_100cmax"], col = myColors$type[ "Srxn1"],
+     ylim = c(0,1), xlim = c(-1.1,4), lwd = 2)
+points( TGP_d_PoDmax[, "DDIT3"], TGP_d_PoDmax[, "GFP_pos.2m_Chop_100cmax"],col = myColors$type[ "Chop"], lwd = 2)
+points( TGP_d_PoDmax[, "CDKN1A"],TGP_d_PoDmax[, "GFP_pos.2m_p21_100cmax"], col = myColors$type[ "p21"],lwd = 2 )
+
+abline(lm(TGP_d_PoDmax[, "GFP_pos.2m_Srxn1_100cmax"]~ TGP_d_PoDmax[, "SRXN1"]), col = myColors$type[ "Srxn1"],lwd = 2 )
+abline(lm(TGP_d_PoDmax[, "GFP_pos.2m_Chop_100cmax"]~ TGP_d_PoDmax[, "DDIT3"]), col = myColors$type[ "Chop"],lwd = 2 )
+abline(lm(TGP_d_PoDmax[, "GFP_pos.2m_p21_100cmax"]~ TGP_d_PoDmax[, "CDKN1A"]), col = myColors$type[ "p21"],lwd = 2 )
+dev.off()
+
+summary(TGP_d_PoDmax[, 1:6])
+
+
+
+max(TGP_d_PoDmax[, "Int_p21_100cmax"])
+max(TGP_d_PoDmax[, "Int_Chop_100cmax"])
+
+
 
 
 ``` 
